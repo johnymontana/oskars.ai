@@ -4,7 +4,10 @@
 // identifying properties (slug for GbuildNode, id for Acceptance, owner+name+
 // direction for Field, node+attempt for Review, node+topic+text for Note,
 // node+name for Symbol, feature for Feature) — stable across polls without
-// relying on engine-internal ids. Nodes and rels come back sorted by id.
+// relying on engine-internal ids. A Field or Review missing its owning
+// GbuildNode edge (INPUT/OUTPUT/REVIEWED) means a broken store: storeGraph
+// fails with an explicit error rather than producing an id embedding
+// "undefined". Nodes and rels come back sorted by id.
 import type { Store } from "./discover.ts"
 import { queryStore } from "./query.ts"
 
@@ -70,9 +73,15 @@ export async function storeGraph(store: Store): Promise<StoreGraph> {
     if (node.labels.includes("Feature")) return `Feature:${p.feature}`
     if (node.labels.includes("Field")) {
       const ctx = fieldContext.get(node.id)
-      return `Field:${ctx?.owner}:${ctx?.direction}:${p.name}`
+      if (!ctx) throw new Error(`Field "${String(p.name)}" has no INPUT/OUTPUT edge from an owning GbuildNode`)
+      return `Field:${ctx.owner}:${ctx.direction}:${p.name}`
     }
-    if (node.labels.includes("Review")) return `Review:${reviewOwner.get(node.id)}:${p.attempt}`
+    if (node.labels.includes("Review")) {
+      const owner = reviewOwner.get(node.id)
+      if (owner == null)
+        throw new Error(`Review attempt ${String(p.attempt)} has no REVIEWED edge from an owning GbuildNode`)
+      return `Review:${owner}:${p.attempt}`
+    }
     if (node.labels.includes("Note")) return `Note:${p.by_node}:${p.topic}:${p.text}`
     if (node.labels.includes("Symbol")) return `Symbol:${p.by_node}:${p.name}`
     return `Node:${node.id}` // a label outside the gbuild schema — engine id as last resort

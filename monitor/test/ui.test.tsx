@@ -86,7 +86,6 @@ const { FeatureList } = await import("../ui/FeatureList.tsx")
 const { GraphDetail } = await import("../ui/GraphDetail.tsx")
 const { AttentionView } = await import("../ui/AttentionView.tsx")
 const { KnowledgeView, toNvlKnowledgeGraph } = await import("../ui/KnowledgeView.tsx")
-const { toNvlGraph, NvlGraph } = await import("../ui/NvlGraph.tsx")
 const { StoreGraphExplorer, FALLBACK_REL_COLORS } = await import("../ui/StoreGraphExplorer.tsx")
 const { TimelineTab } = await import("../ui/TimelineTab.tsx")
 const { App } = await import("../ui/App.tsx")
@@ -335,6 +334,31 @@ const STATUS_BY_SLUG = new Map([
   ["b-use", "frontier"],
 ])
 
+// gamma: a three-node skeleton where c-solo sits outside a-impl/b-use's
+// dependency neighborhood, for the Graph tab focus test.
+const GAMMA_GRAPH = {
+  project: "/repo/project-one",
+  slug: "gamma",
+  destination: "Gamma feature done.",
+  nodes: [
+    { slug: "a-impl", title: "Implement gamma", type: "code", status: "completed", wave: 0, acceptance: [], depends_on: [], model_tier: "fast", failure_policy: "retry", started_at: null, completed_at: null, inputs: [], outputs: [], reviews: [] },
+    { slug: "b-use", title: "Use gamma value", type: "code", status: "frontier", wave: 1, acceptance: [], depends_on: ["a-impl"], model_tier: "standard", failure_policy: "halt", started_at: null, completed_at: null, inputs: [], outputs: [], reviews: [] },
+    { slug: "c-solo", title: "Solo gamma", type: "code", status: "blocked", wave: 0, acceptance: [], depends_on: [], model_tier: "fast", failure_policy: "retry", started_at: null, completed_at: null, inputs: [], outputs: [], reviews: [] },
+  ],
+  acceptance: [],
+}
+
+const GAMMA_STORE = {
+  nodes: [
+    { id: "GbuildNode:a-impl", labels: ["GbuildNode", "Code"], properties: { slug: "a-impl", title: "Implement gamma", type: "code", status: "completed" } },
+    { id: "GbuildNode:b-use", labels: ["GbuildNode", "Code"], properties: { slug: "b-use", title: "Use gamma value", type: "code", status: "frontier" } },
+    { id: "GbuildNode:c-solo", labels: ["GbuildNode", "Code"], properties: { slug: "c-solo", title: "Solo gamma", type: "code", status: "blocked" } },
+  ],
+  rels: [
+    { id: "DEPENDS_ON:GbuildNode:b-use->GbuildNode:a-impl", type: "DEPENDS_ON", from: "GbuildNode:b-use", to: "GbuildNode:a-impl", properties: {} },
+  ],
+}
+
 let fetchCalls: string[] = []
 globalThis.fetch = (async (input: any, init?: any) => {
   const path = String(input)
@@ -349,6 +373,8 @@ globalThis.fetch = (async (input: any, init?: any) => {
     return Response.json({ rows: QUERY_SCALAR_ROWS })
   }
   if (path === "/api/features/alpha/store-graph") return Response.json(STORE_GRAPH)
+  if (path === "/api/features/gamma/graph") return Response.json(GAMMA_GRAPH)
+  if (path === "/api/features/gamma/store-graph") return Response.json(GAMMA_STORE)
   if (path === "/api/attention") return Response.json(ATTENTION)
   if (path === "/api/knowledge") return Response.json(KNOWLEDGE)
   if (path === "/api/knowledge/graph") return Response.json(KNOWLEDGE_GRAPH)
@@ -478,77 +504,44 @@ describe("monitor ui", () => {
     await unmount()
   })
 
-  test("graph interactions: click selects, double-click dims outside the neighborhood, canvas double-click resets", async () => {
+  test("graph tab: double-clicking a node dims elements outside its transitive neighborhood, Esc or canvas double-click resets", async () => {
     const ref = React.createRef<any>()
-    const clicked: string[] = []
-    let canvasDoubleClicks = 0
-    const nodes = [
-      { slug: "a-impl", status: "completed", depends_on: [] },
-      { slug: "b-use", status: "frontier", depends_on: ["a-impl"] },
-      { slug: "c-solo", status: "blocked", depends_on: [] },
-    ] as any
-    const { container, unmount } = await render(
-      <NvlGraph
-        nodes={nodes}
-        nvlRef={ref}
-        onNodeClick={(slug: string) => clicked.push(slug)}
-        onCanvasDoubleClick={() => canvasDoubleClicks++}
-      />,
-    )
-    // Toolbar: layout toggle (hierarchical by default), zoom controls, fit.
-    const toggle = [...container.querySelectorAll(".graph-toolbar button")].find((b) =>
-      b.textContent?.includes("layout:"),
-    )
-    assert.ok(toggle, "layout toggle is present")
-    assert.ok(toggle.textContent?.includes("hierarchical"), "hierarchical is the default layout")
-    for (const label of ["zoom in", "zoom out", "fit graph"]) {
-      assert.ok(container.querySelector(`.graph-toolbar button[aria-label='${label}']`), `${label} control is present`)
-    }
+    const { container, unmount } = await render(<GraphDetail slug="gamma" pollInterval={60_000} nvlRef={ref} />)
 
     // Wait for the hierarchical layout to settle (synchronous fallback in jsdom).
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 300))
     })
     const wrapper = container.querySelector("#NVL_interactive-wrapper") as Element
-    assert.ok(wrapper, "NVL wrapper is mounted")
+    assert.ok(wrapper, "graph tab mounts the NVL wrapper")
     const positionOf = (id: string) =>
       (ref.current.getNodes() as any[]).find((n) => n.id === id).clientPosition as { x: number; y: number }
-    const clickAt = (id: string) => {
-      const { x, y } = positionOf(id)
-      wrapper.dispatchEvent(new MouseEvent("mousedown", { clientX: x, clientY: y, button: 0, bubbles: true }))
-      wrapper.dispatchEvent(new MouseEvent("click", { clientX: x, clientY: y, button: 0, bubbles: true }))
-    }
     const doubleClickAt = (x: number, y: number) =>
       wrapper.dispatchEvent(new MouseEvent("dblclick", { clientX: x, clientY: y, bubbles: true }))
 
-    // Clicking a node reports its slug (GraphDetail opens the side panel on this).
-    await act(async () => clickAt("b-use"))
-    assert.deepEqual(clicked, ["b-use"], "node click reports the clicked node's slug")
-
     // Status colors come from the theme tokens (fallback values without CSS in jsdom).
-    assert.equal(ref.current.getNodeById("a-impl").color, "#4caf7d")
-    assert.equal(ref.current.getNodeById("b-use").color, "#5b9dff")
-    assert.equal(ref.current.getNodeById("c-solo").color, "#8b94a3")
+    assert.equal(ref.current.getNodeById("GbuildNode:a-impl").color, "#4caf7d")
+    assert.equal(ref.current.getNodeById("GbuildNode:b-use").color, "#5b9dff")
+    assert.equal(ref.current.getNodeById("GbuildNode:c-solo").color, "#8b94a3")
 
-    // Double-clicking b-use dims everything outside its transitive neighborhood.
-    const { x, y } = positionOf("b-use")
+    // Double-clicking b-use dims everything outside its transitive upstream+downstream neighborhood.
+    const { x, y } = positionOf("GbuildNode:b-use")
     await act(async () => doubleClickAt(x, y))
-    assert.equal(ref.current.getNodeById("a-impl").color, "#4caf7d", "upstream dependency stays lit")
-    assert.equal(ref.current.getNodeById("b-use").color, "#5b9dff", "focused node stays lit")
-    assert.equal(ref.current.getNodeById("c-solo").color, "#8b94a32e", "unrelated node is dimmed")
+    assert.equal(ref.current.getNodeById("GbuildNode:a-impl").color, "#4caf7d", "upstream dependency stays lit")
+    assert.equal(ref.current.getNodeById("GbuildNode:b-use").color, "#5b9dff", "focused node stays lit")
+    assert.equal(ref.current.getNodeById("GbuildNode:c-solo").color, "#8b94a32e", "the node outside the neighborhood is dimmed")
 
-    // Double-clicking the canvas resets the focus (restyle only).
-    await act(async () => doubleClickAt(-9999, -9999))
-    assert.equal(canvasDoubleClicks, 1, "canvas double-click is reported")
-    assert.equal(ref.current.getNodeById("c-solo").color, "#8b94a3", "reset restores the status color")
-
-    // The toggle switches to force-directed.
+    // Esc resets the focus (restyle only).
     await act(async () => {
-      toggle.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))
     })
-    assert.ok(toggle.textContent?.includes("force-directed"), "toggle switches to force-directed")
-    assert.equal(toggle.getAttribute("aria-pressed"), "true")
-    assert.ok(container.querySelector("canvas"), "graph still renders after the layout switch")
+    assert.equal(ref.current.getNodeById("GbuildNode:c-solo").color, "#8b94a3", "Esc restores the status color")
+
+    // Focus again, then double-clicking the canvas resets it.
+    await act(async () => doubleClickAt(x, y))
+    assert.equal(ref.current.getNodeById("GbuildNode:c-solo").color, "#8b94a32e")
+    await act(async () => doubleClickAt(-9999, -9999))
+    assert.equal(ref.current.getNodeById("GbuildNode:c-solo").color, "#8b94a3", "canvas double-click restores the status color")
     await unmount()
   })
 
@@ -733,21 +726,12 @@ describe("monitor ui", () => {
     window.location.hash = ""
   })
 
-  test("detail view mounts InteractiveNvlWrapper with the fixture nodes and DEPENDS_ON rels", async () => {
-    const ref = React.createRef<any>()
-    const { nodes, rels } = toNvlGraph(GRAPH.nodes as any)
-    const { container, unmount } = await render(
-      <InteractiveNvlWrapper ref={ref} nodes={nodes} rels={rels} nvlOptions={{ renderer: "canvas", disableWebGL: true }} />,
-    )
-    assert.deepEqual(
-      ref.current?.getNodes().map((n: any) => n.id),
-      ["a-impl", "b-use"],
-    )
-    assert.deepEqual(
-      ref.current?.getRelationships().map((r: any) => ({ id: r.id, from: r.from, to: r.to })),
-      [{ id: "b-use->a-impl", from: "b-use", to: "a-impl" }],
-    )
-    assert.ok(container.querySelector("canvas"), "canvas renderer draws into the container")
+  test("the timeline tab does not fetch the store graph", async () => {
+    const storeGraphCalls = () => fetchCalls.filter((p) => p === "/api/features/alpha/store-graph").length
+    const before = storeGraphCalls()
+    const { container, unmount } = await render(<GraphDetail slug="alpha" tab="timeline" pollInterval={60_000} />)
+    assert.ok(container.querySelector(".timeline-bar"), "timeline tab renders the run bars")
+    assert.equal(storeGraphCalls(), before, "the timeline tab does not fetch the store graph")
     await unmount()
   })
 
