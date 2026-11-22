@@ -2,6 +2,7 @@
 // with the `?poll=<ms>` query parameter.
 import { createRoot } from "react-dom/client"
 import { App } from "./App.tsx"
+import "./theme.css"
 
 const requested = Number(new URLSearchParams(window.location.search).get("poll"))
 

@@ -4,6 +4,7 @@
 import type { FieldValue, GraphNode } from "../src/graph.ts"
 import { fetchGraph } from "./api.ts"
 import { NvlGraph } from "./NvlGraph.tsx"
+import { StatusChip } from "./StatusChip.tsx"
 import { usePoll } from "./usePoll.ts"
 
 const formatValue = (value: unknown) => (value === null || value === undefined ? "—" : JSON.stringify(value))
@@ -17,7 +18,7 @@ function FieldList({ title, fields }: { title: string; fields: FieldValue[] }) {
         {fields.map((f) => (
           <li key={f.name}>
             <code>{f.name}</code> {f.shape}
-            {f.from ? ` (from ${f.from})` : ""}: {formatValue(f.value)}
+            {f.from ? ` (from ${f.from})` : ""}: <code>{formatValue(f.value)}</code>
           </li>
         ))}
       </ul>
@@ -29,7 +30,8 @@ function NodeCard({ node }: { node: GraphNode }) {
   return (
     <article>
       <h3>
-        {node.slug} — {node.title} [{node.type}] <strong>{node.status}</strong>
+        <span className="mono">{node.slug}</span> — {node.title} [{node.type}]{" "}
+        <StatusChip status={node.status} />
       </h3>
       {node.acceptance.length > 0 && (
         <ul>
@@ -59,8 +61,12 @@ function NodeCard({ node }: { node: GraphNode }) {
 
 export function GraphDetail({ slug, pollInterval }: { slug: string; pollInterval?: number }) {
   const { data, error } = usePoll(() => fetchGraph(slug), pollInterval)
-  if (error) return <p role="alert">failed to load graph: {error}</p>
-  if (!data) return <p>loading…</p>
+  if (error) return (
+    <p role="alert" className="state state-error">
+      failed to load graph: {error}
+    </p>
+  )
+  if (!data) return <p className="state state-loading">loading…</p>
   const waves = new Map<number, GraphNode[]>()
   for (const node of data.nodes) {
     const group = waves.get(node.wave) ?? []
@@ -71,7 +77,7 @@ export function GraphDetail({ slug, pollInterval }: { slug: string; pollInterval
     <section>
       <h1>{data.slug}</h1>
       <p>
-        {data.project} — {data.destination}
+        <span className="mono">{data.project}</span> — {data.destination}
       </p>
       <p>
         <a href="#/">← all features</a>
