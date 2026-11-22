@@ -1,5 +1,9 @@
 // GET /api/knowledge: the notes and symbols implementers left, across all
 // discovered stores, each annotated with its project and feature slug.
+// GET /api/knowledge/graph: the same reads as a graph — symbols merged by
+// name+file across stores, notes individual and linked to shared topic hubs,
+// one node per feature, and DEFINES/WROTE/ABOUT edges carrying project,
+// feature and by_node provenance.
 import type { MonitorConfig } from "./config.ts"
 import { discoverStores } from "./discover.ts"
 import { queryStore } from "./query.ts"
@@ -67,4 +71,68 @@ export async function listKnowledge(config: MonitorConfig): Promise<Knowledge> {
     notes: perStore.flatMap((k) => k.notes),
     symbols: perStore.flatMap((k) => k.symbols),
   }
+}
+
+export interface KnowledgeGraphNode {
+  id: string
+  labels: string[]
+  properties: Record<string, unknown>
+}
+
+export interface KnowledgeGraphRel {
+  id: string
+  type: string
+  from: string
+  to: string
+  properties: { project: string; feature: string; by_node: string }
+}
+
+export interface KnowledgeGraph {
+  nodes: KnowledgeGraphNode[]
+  rels: KnowledgeGraphRel[]
+}
+
+export async function knowledgeGraph(config: MonitorConfig): Promise<KnowledgeGraph> {
+  const { notes, symbols } = await listKnowledge(config)
+  const nodes = new Map<string, KnowledgeGraphNode>()
+  const rels = new Map<string, KnowledgeGraphRel>()
+  const addNode = (node: KnowledgeGraphNode) => {
+    if (!nodes.has(node.id)) nodes.set(node.id, node)
+  }
+  const featureNode = (project: string, feature: string): string => {
+    const id = `Feature:${project}:${feature}`
+    addNode({ id, labels: ["Feature"], properties: { project, feature } })
+    return id
+  }
+  const addRel = (
+    type: string,
+    from: string,
+    to: string,
+    provenance: { project: string; feature: string; by_node: string },
+  ) => {
+    const id = `${type}:${from}->${to}:${provenance.by_node}`
+    rels.set(id, {
+      id,
+      type,
+      from,
+      to,
+      properties: { project: provenance.project, feature: provenance.feature, by_node: provenance.by_node },
+    })
+  }
+  for (const symbol of symbols) {
+    // name+file merges across stores; the first occurrence's purpose stands
+    const id = `Symbol:${symbol.name}:${symbol.file}`
+    addNode({ id, labels: ["Symbol"], properties: { name: symbol.name, file: symbol.file, purpose: symbol.purpose } })
+    addRel("DEFINES", featureNode(symbol.project, symbol.feature), id, symbol)
+  }
+  for (const note of notes) {
+    const noteId = `Note:${note.project}:${note.feature}:${note.topic}:${note.text}`
+    addNode({ id: noteId, labels: ["Note"], properties: { topic: note.topic, text: note.text, by_node: note.by_node } })
+    const topicId = `Topic:${note.topic}`
+    addNode({ id: topicId, labels: ["Topic"], properties: { topic: note.topic } })
+    addRel("WROTE", featureNode(note.project, note.feature), noteId, note)
+    addRel("ABOUT", noteId, topicId, note)
+  }
+  const byId = <T extends { id: string }>(a: T, b: T) => a.id.localeCompare(b.id)
+  return { nodes: [...nodes.values()].sort(byId), rels: [...rels.values()].sort(byId) }
 }
