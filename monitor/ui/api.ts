@@ -19,5 +19,4 @@ export const fetchFeatures = () => get<FeatureSummary[]>("/api/features")
 export const fetchGraph = (slug: string) => get<GraphDetail>(`/api/features/${encodeURIComponent(slug)}/graph`)
 
 export const fetchAttention = () => get<AttentionItem[]>("/api/attention")
-
 export const fetchKnowledge = () => get<Knowledge>("/api/knowledge")

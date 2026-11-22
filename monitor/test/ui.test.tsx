@@ -86,7 +86,7 @@ const { FeatureList } = await import("../ui/FeatureList.tsx")
 const { GraphDetail } = await import("../ui/GraphDetail.tsx")
 const { AttentionView } = await import("../ui/AttentionView.tsx")
 const { KnowledgeView } = await import("../ui/KnowledgeView.tsx")
-const { toNvlGraph } = await import("../ui/NvlGraph.tsx")
+const { toNvlGraph, NvlGraph } = await import("../ui/NvlGraph.tsx")
 const { App } = await import("../ui/App.tsx")
 const { StatusChip } = await import("../ui/StatusChip.tsx")
 
@@ -108,9 +108,21 @@ const GRAPH = {
       wave: 0,
       acceptance: ["alpha implemented"],
       depends_on: [],
+      model_tier: "fast",
+      failure_policy: "retry",
+      started_at: "2026-01-01T00:10:00Z",
+      completed_at: "2026-01-01T00:13:05Z",
       inputs: [],
       outputs: [{ name: "value", shape: "<integer>", from: null, value: 21 }],
-      reviews: [{ attempt: 1, verdict: "pass", failed_criteria: [], at: "2026-01-01T00:11:00Z" }],
+      reviews: [
+        {
+          attempt: 1,
+          verdict: "pass",
+          failed_criteria: [],
+          checklist: ["build green"],
+          at: "2026-01-01T00:11:00Z",
+        },
+      ],
     },
     {
       slug: "b-use",
@@ -120,6 +132,10 @@ const GRAPH = {
       wave: 1,
       acceptance: ["uses the value"],
       depends_on: ["a-impl"],
+      model_tier: "standard",
+      failure_policy: "halt",
+      started_at: null,
+      completed_at: null,
       inputs: [{ name: "value", shape: "<integer>", from: "a-impl.output.value", value: 21 }],
       outputs: [{ name: "result", shape: "<integer>", from: null, value: null }],
       reviews: [],
@@ -151,9 +167,12 @@ const KNOWLEDGE = {
     { topic: "setup", text: "run npm ci at the worktree root", by_node: "a-impl", project: "/repo/project-one", feature: "alpha" },
     { topic: "testing", text: "node --test runs the suite", by_node: "b-use", project: "/repo/project-one", feature: "alpha" },
     { topic: "setup", text: "relate must be on PATH", by_node: "c-wire", project: "/repo/project-two", feature: "beta" },
+    { topic: "testing", text: "layout settles asynchronously in jsdom", by_node: "a-impl", project: "/repo/project-one", feature: "alpha" },
+    { topic: "setup", text: "unrelated note from another node", by_node: "other-node", project: "/repo/project-one", feature: "alpha" },
   ],
   symbols: [
     { name: "listAttention", file: "src/attention.ts", purpose: "failed and blocked nodes across stores", by_node: "a-impl", project: "/repo/project-one", feature: "alpha" },
+    { name: "toNvlGraph", file: "monitor/ui/NvlGraph.tsx", purpose: "maps graph nodes to NVL nodes/rels", by_node: "a-impl", project: "/repo/project-one", feature: "alpha" },
   ],
 }
 
@@ -231,29 +250,137 @@ describe("monitor ui", () => {
     }
   })
 
-  test("graph detail groups nodes by wave with status, acceptance, field values and verdicts", async () => {
+  test("graph detail: compact wave list opens the side panel with full node detail, Esc closes it", async () => {
     const { container, unmount } = await render(<GraphDetail slug="alpha" pollInterval={60_000} />)
     const text = container.textContent ?? ""
-    for (const expected of [
-      "wave 0",
-      "a-impl",
-      "completed",
-      "alpha implemented",
-      "21",
-      "pass",
-      "wave 1",
-      "b-use",
-      "frontier",
-      "uses the value",
-      "a-impl.output.value",
-      "result",
-    ]) {
+    // The wave-grouped list is a compact summary: name + status chip only.
+    for (const expected of ["wave 0", "a-impl", "completed", "wave 1", "b-use", "frontier"]) {
       assert.ok(text.includes(expected), `graph detail should contain ${JSON.stringify(expected)}`)
     }
+    assert.ok(!text.includes("alpha implemented"), "acceptance detail lives in the side panel, not the wave list")
+    assert.ok(container.querySelector(".wave-list .status-chip[data-status='completed']"), "wave list carries status chips")
     const [wave0, wave1] = [text.indexOf("wave 0"), text.indexOf("wave 1")]
     assert.ok(wave0 !== -1 && wave1 !== -1 && wave0 < wave1, "waves render in order")
     assert.ok(container.querySelector("#NVL_interactive-wrapper"), "detail view mounts the NVL wrapper")
     assert.ok(container.querySelector("canvas"), "canvas renderer draws into the container")
+
+    // Clicking a wave-list entry opens the side panel with full node detail.
+    const entry = [...container.querySelectorAll(".wave-list button")].find((b) => b.textContent?.includes("a-impl"))
+    assert.ok(entry, "wave list has an entry for a-impl")
+    await act(async () => {
+      entry.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    const panel = container.querySelector(".node-panel")
+    assert.ok(panel, "clicking a wave-list entry opens the side panel")
+    const panelText = panel.textContent ?? ""
+    for (const expected of [
+      "Implement alpha",
+      "alpha implemented",
+      "21",
+      "pass",
+      "build green",
+      "fast",
+      "retry",
+      "2026-01-01T00:10:00Z",
+      "2026-01-01T00:13:05Z",
+      "3m 5s",
+      "layout settles asynchronously in jsdom",
+      "toNvlGraph",
+    ]) {
+      assert.ok(panelText.includes(expected), `side panel should contain ${JSON.stringify(expected)}`)
+    }
+    assert.ok(!panelText.includes("unrelated note"), "panel only shows the selected node's notes")
+
+    // Esc closes the panel.
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))
+    })
+    assert.ok(!container.querySelector(".node-panel"), "Esc closes the side panel")
+
+    // Clicking another entry reopens the panel with that node's fields.
+    const other = [...container.querySelectorAll(".wave-list button")].find((b) => b.textContent?.includes("b-use"))
+    assert.ok(other, "wave list has an entry for b-use")
+    await act(async () => {
+      other.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    const panelText2 = container.querySelector(".node-panel")?.textContent ?? ""
+    for (const expected of ["uses the value", "a-impl.output.value", "result", "standard", "halt"]) {
+      assert.ok(panelText2.includes(expected), `side panel should contain ${JSON.stringify(expected)}`)
+    }
+    await unmount()
+  })
+
+  test("graph interactions: click selects, double-click dims outside the neighborhood, canvas double-click resets", async () => {
+    const ref = React.createRef<any>()
+    const clicked: string[] = []
+    let canvasDoubleClicks = 0
+    const nodes = [
+      { slug: "a-impl", status: "completed", depends_on: [] },
+      { slug: "b-use", status: "frontier", depends_on: ["a-impl"] },
+      { slug: "c-solo", status: "blocked", depends_on: [] },
+    ] as any
+    const { container, unmount } = await render(
+      <NvlGraph
+        nodes={nodes}
+        nvlRef={ref}
+        onNodeClick={(slug: string) => clicked.push(slug)}
+        onCanvasDoubleClick={() => canvasDoubleClicks++}
+      />,
+    )
+    // Toolbar: layout toggle (hierarchical by default), zoom controls, fit.
+    const toggle = [...container.querySelectorAll(".graph-toolbar button")].find((b) =>
+      b.textContent?.includes("layout:"),
+    )
+    assert.ok(toggle, "layout toggle is present")
+    assert.ok(toggle.textContent?.includes("hierarchical"), "hierarchical is the default layout")
+    for (const label of ["zoom in", "zoom out", "fit graph"]) {
+      assert.ok(container.querySelector(`.graph-toolbar button[aria-label='${label}']`), `${label} control is present`)
+    }
+
+    // Wait for the hierarchical layout to settle (synchronous fallback in jsdom).
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
+    const wrapper = container.querySelector("#NVL_interactive-wrapper") as Element
+    assert.ok(wrapper, "NVL wrapper is mounted")
+    const positionOf = (id: string) =>
+      (ref.current.getNodes() as any[]).find((n) => n.id === id).clientPosition as { x: number; y: number }
+    const clickAt = (id: string) => {
+      const { x, y } = positionOf(id)
+      wrapper.dispatchEvent(new MouseEvent("mousedown", { clientX: x, clientY: y, button: 0, bubbles: true }))
+      wrapper.dispatchEvent(new MouseEvent("click", { clientX: x, clientY: y, button: 0, bubbles: true }))
+    }
+    const doubleClickAt = (x: number, y: number) =>
+      wrapper.dispatchEvent(new MouseEvent("dblclick", { clientX: x, clientY: y, bubbles: true }))
+
+    // Clicking a node reports its slug (GraphDetail opens the side panel on this).
+    await act(async () => clickAt("b-use"))
+    assert.deepEqual(clicked, ["b-use"], "node click reports the clicked node's slug")
+
+    // Status colors come from the theme tokens (fallback values without CSS in jsdom).
+    assert.equal(ref.current.getNodeById("a-impl").color, "#4caf7d")
+    assert.equal(ref.current.getNodeById("b-use").color, "#5b9dff")
+    assert.equal(ref.current.getNodeById("c-solo").color, "#8b94a3")
+
+    // Double-clicking b-use dims everything outside its transitive neighborhood.
+    const { x, y } = positionOf("b-use")
+    await act(async () => doubleClickAt(x, y))
+    assert.equal(ref.current.getNodeById("a-impl").color, "#4caf7d", "upstream dependency stays lit")
+    assert.equal(ref.current.getNodeById("b-use").color, "#5b9dff", "focused node stays lit")
+    assert.equal(ref.current.getNodeById("c-solo").color, "#8b94a32e", "unrelated node is dimmed")
+
+    // Double-clicking the canvas resets the focus (restyle only).
+    await act(async () => doubleClickAt(-9999, -9999))
+    assert.equal(canvasDoubleClicks, 1, "canvas double-click is reported")
+    assert.equal(ref.current.getNodeById("c-solo").color, "#8b94a3", "reset restores the status color")
+
+    // The toggle switches to force-directed.
+    await act(async () => {
+      toggle.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    assert.ok(toggle.textContent?.includes("force-directed"), "toggle switches to force-directed")
+    assert.equal(toggle.getAttribute("aria-pressed"), "true")
+    assert.ok(container.querySelector("canvas"), "graph still renders after the layout switch")
     await unmount()
   })
 

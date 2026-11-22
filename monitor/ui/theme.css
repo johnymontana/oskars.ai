@@ -184,6 +184,104 @@ article h3 {
   color: var(--status-cancelled);
 }
 
+/* Graph frame: toolbar (layout toggle, zoom, fit) above the NVL canvas */
+.graph-frame {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-inset);
+}
+.graph-toolbar {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+.graph-toolbar button {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 0.15rem 0.55rem;
+  cursor: pointer;
+}
+.graph-toolbar button:hover {
+  border-color: var(--accent);
+}
+.graph-toolbar button[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Node detail side panel: fixed right, scrolls, overlays the page */
+.node-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 90vw);
+  background: var(--bg-raised);
+  border-left: 1px solid var(--border);
+  padding: 1rem 1.25rem;
+  overflow-y: auto;
+  z-index: 10;
+  font-size: var(--text-sm);
+}
+.node-panel h2 {
+  margin-top: 0;
+}
+.node-panel-close {
+  float: right;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: var(--text-md);
+  padding: 0 0.5rem;
+  cursor: pointer;
+}
+.node-panel-close:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.node-panel dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.75rem;
+  margin: 0.5rem 0;
+}
+.node-panel dt {
+  color: var(--text-dim);
+}
+.node-panel dd {
+  margin: 0;
+}
+
+/* Compact wave summary list: name + status chip, click opens the side panel */
+.wave-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.4rem 0 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.wave-list button {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: var(--text-sm);
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+}
+.wave-list button:hover {
+  border-color: var(--accent);
+}
+
 /* Empty, loading and error states */
 .state {
   padding: 1.5rem 1rem;

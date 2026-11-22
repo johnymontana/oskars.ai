@@ -1,72 +1,41 @@
-// Graph detail view: the NVL dependency graph plus the node list grouped by
-// wave. Per node it shows status, acceptance criteria, input/output field
-// values, and review verdicts. Polls /api/features/:slug/graph.
-import type { FieldValue, GraphNode } from "../src/graph.ts"
-import { fetchGraph } from "./api.ts"
+// Graph detail view: the NVL dependency graph as the primary surface, a node
+// detail side panel (opened from the graph or the compact wave list, closed by
+// Esc or canvas double-click), and the wave-grouped node summary list. Polls
+// /api/features/:slug/graph and /api/knowledge.
+import { useEffect, useState } from "react"
+import type { GraphNode } from "../src/graph.ts"
+import { fetchGraph, fetchKnowledge } from "./api.ts"
+import { NodePanel } from "./NodePanel.tsx"
 import { NvlGraph } from "./NvlGraph.tsx"
 import { StatusChip } from "./StatusChip.tsx"
 import { usePoll } from "./usePoll.ts"
 
-const formatValue = (value: unknown) => (value === null || value === undefined ? "—" : JSON.stringify(value))
-
-function FieldList({ title, fields }: { title: string; fields: FieldValue[] }) {
-  if (fields.length === 0) return null
-  return (
-    <div>
-      <h4>{title}</h4>
-      <ul>
-        {fields.map((f) => (
-          <li key={f.name}>
-            <code>{f.name}</code> {f.shape}
-            {f.from ? ` (from ${f.from})` : ""}: <code>{formatValue(f.value)}</code>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-function NodeCard({ node }: { node: GraphNode }) {
-  return (
-    <article>
-      <h3>
-        <span className="mono">{node.slug}</span> — {node.title} [{node.type}]{" "}
-        <StatusChip status={node.status} />
-      </h3>
-      {node.acceptance.length > 0 && (
-        <ul>
-          {node.acceptance.map((criterion) => (
-            <li key={criterion}>{criterion}</li>
-          ))}
-        </ul>
-      )}
-      <FieldList title="inputs" fields={node.inputs} />
-      <FieldList title="outputs" fields={node.outputs} />
-      {node.reviews.length > 0 && (
-        <div>
-          <h4>reviews</h4>
-          <ul>
-            {node.reviews.map((r) => (
-              <li key={r.attempt}>
-                attempt {r.attempt}: {r.verdict} ({r.at})
-                {r.failed_criteria.length > 0 && ` — failed: ${r.failed_criteria.join("; ")}`}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </article>
-  )
-}
-
 export function GraphDetail({ slug, pollInterval }: { slug: string; pollInterval?: number }) {
   const { data, error } = usePoll(() => fetchGraph(slug), pollInterval)
+  const { data: knowledge } = usePoll(fetchKnowledge, pollInterval)
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
+
+  // Esc closes the side panel.
+  useEffect(() => {
+    if (!selectedSlug) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedSlug(null)
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [selectedSlug])
+
   if (error) return (
     <p role="alert" className="state state-error">
       failed to load graph: {error}
     </p>
   )
   if (!data) return <p className="state state-loading">loading…</p>
+
+  const selected = data.nodes.find((n) => n.slug === selectedSlug) ?? null
+  const leftBySelected = (item: { by_node: string; project: string; feature: string }) =>
+    selected !== null && item.by_node === selected.slug && item.project === data.project && item.feature === data.slug
+
   const waves = new Map<number, GraphNode[]>()
   for (const node of data.nodes) {
     const group = waves.get(node.wave) ?? []
@@ -82,15 +51,34 @@ export function GraphDetail({ slug, pollInterval }: { slug: string; pollInterval
       <p>
         <a href="#/">← all features</a>
       </p>
-      <NvlGraph nodes={data.nodes} />
+      <NvlGraph
+        nodes={data.nodes}
+        selectedSlug={selectedSlug}
+        onNodeClick={setSelectedSlug}
+        onCanvasDoubleClick={() => setSelectedSlug(null)}
+      />
+      {selected && (
+        <NodePanel
+          node={selected}
+          notes={(knowledge?.notes ?? []).filter(leftBySelected)}
+          symbols={(knowledge?.symbols ?? []).filter(leftBySelected)}
+          onClose={() => setSelectedSlug(null)}
+        />
+      )}
       {[...waves.entries()]
         .sort(([a], [b]) => a - b)
         .map(([wave, nodes]) => (
           <section key={wave}>
             <h2>wave {wave}</h2>
-            {nodes.map((node) => (
-              <NodeCard key={node.slug} node={node} />
-            ))}
+            <ul className="wave-list">
+              {nodes.map((node) => (
+                <li key={node.slug}>
+                  <button type="button" onClick={() => setSelectedSlug(node.slug)}>
+                    <span className="mono">{node.slug}</span> <StatusChip status={node.status} />
+                  </button>
+                </li>
+              ))}
+            </ul>
           </section>
         ))}
     </section>
