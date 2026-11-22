@@ -1,5 +1,7 @@
-// Render tests for the monitor web UI: the feature list, the graph detail
-// (grouped by wave), polling, and the NVL mount — all against a mocked fetch.
+// Render tests for the monitor web UI: the feature list with its
+// needs-attention section, the graph detail (grouped by wave), the attention
+// dashboard, the knowledge browser, polling, and the NVL mount — all against
+// a mocked fetch.
 // Runs in jsdom (no vite needed):  node --import tsx --test monitor/test/ui.test.tsx
 //
 // jsdom has no canvas or ResizeObserver, so the canvas 2d context and
@@ -82,6 +84,8 @@ const { createRoot } = await import("react-dom/client")
 const { InteractiveNvlWrapper } = await import("@neo4j-nvl/react")
 const { FeatureList } = await import("../ui/FeatureList.tsx")
 const { GraphDetail } = await import("../ui/GraphDetail.tsx")
+const { AttentionView } = await import("../ui/AttentionView.tsx")
+const { KnowledgeView } = await import("../ui/KnowledgeView.tsx")
 const { toNvlGraph } = await import("../ui/NvlGraph.tsx")
 const { App } = await import("../ui/App.tsx")
 const { StatusChip } = await import("../ui/StatusChip.tsx")
@@ -123,12 +127,44 @@ const GRAPH = {
   ],
 }
 
+const ATTENTION = [
+  {
+    project: "/repo/project-one",
+    feature: "alpha",
+    node: "b-use",
+    state: "failed",
+    waiting_on: [],
+    last_failed_criteria: ["uses the value"],
+  },
+  {
+    project: "/repo/project-two",
+    feature: "beta",
+    node: "c-wire",
+    state: "blocked",
+    waiting_on: ["b-prep"],
+    last_failed_criteria: [],
+  },
+]
+
+const KNOWLEDGE = {
+  notes: [
+    { topic: "setup", text: "run npm ci at the worktree root", by_node: "a-impl", project: "/repo/project-one", feature: "alpha" },
+    { topic: "testing", text: "node --test runs the suite", by_node: "b-use", project: "/repo/project-one", feature: "alpha" },
+    { topic: "setup", text: "relate must be on PATH", by_node: "c-wire", project: "/repo/project-two", feature: "beta" },
+  ],
+  symbols: [
+    { name: "listAttention", file: "src/attention.ts", purpose: "failed and blocked nodes across stores", by_node: "a-impl", project: "/repo/project-one", feature: "alpha" },
+  ],
+}
+
 let fetchCalls: string[] = []
 globalThis.fetch = (async (input: any) => {
   const path = String(input)
   fetchCalls.push(path)
   if (path === "/api/features") return Response.json(FEATURES)
   if (path === "/api/features/alpha/graph") return Response.json(GRAPH)
+  if (path === "/api/attention") return Response.json(ATTENTION)
+  if (path === "/api/knowledge") return Response.json(KNOWLEDGE)
   return new Response("not found", { status: 404 })
 }) as typeof fetch
 
@@ -260,6 +296,99 @@ describe("monitor ui", () => {
       assert.equal(link.textContent, label)
     }
     await unmount()
+  })
+
+  test("feature list tops the landing with a needs-attention section linking to each feature", async () => {
+    const { container, unmount } = await render(<FeatureList pollInterval={60_000} />)
+    const text = container.textContent ?? ""
+    for (const expected of ["needs attention", "b-use", "failed", "uses the value", "c-wire", "blocked", "b-prep"]) {
+      assert.ok(text.includes(expected), `needs-attention section should contain ${JSON.stringify(expected)}`)
+    }
+    assert.ok(
+      text.indexOf("needs attention") < text.indexOf("gbuild features"),
+      "the needs-attention section renders above the feature list",
+    )
+    const section = container.querySelector("section")
+    assert.ok(section?.querySelector("a[href='#/features/alpha']"), "attention item links to feature alpha")
+    assert.ok(section?.querySelector("a[href='#/features/beta']"), "attention item links to feature beta")
+    assert.ok(section?.querySelector(".status-chip[data-status='failed']"), "failed state uses the status chip")
+    assert.ok(section?.querySelector(".status-chip[data-status='blocked']"), "blocked state uses the status chip")
+    await unmount()
+  })
+
+  test("attention view lists failed and blocked nodes across stores with state, waiting_on and last failed criteria", async () => {
+    const { container, unmount } = await render(<AttentionView pollInterval={60_000} />)
+    const text = container.textContent ?? ""
+    for (const expected of [
+      "/repo/project-one",
+      "alpha",
+      "b-use",
+      "failed",
+      "uses the value",
+      "/repo/project-two",
+      "beta",
+      "c-wire",
+      "blocked",
+      "b-prep",
+    ]) {
+      assert.ok(text.includes(expected), `attention view should contain ${JSON.stringify(expected)}`)
+    }
+    assert.ok(container.querySelector("a[href='#/features/alpha']"), "feature links to its graph detail")
+    await unmount()
+  })
+
+  test("knowledge view groups notes by topic, lists symbols, and the search box filters both", async () => {
+    const { container, unmount } = await render(<KnowledgeView pollInterval={60_000} />)
+    const text = container.textContent ?? ""
+    for (const expected of [
+      "setup",
+      "testing",
+      "run npm ci at the worktree root",
+      "relate must be on PATH",
+      "node --test runs the suite",
+      "listAttention",
+      "src/attention.ts",
+      "failed and blocked nodes across stores",
+      "a-impl",
+      "/repo/project-two/beta",
+    ]) {
+      assert.ok(text.includes(expected), `knowledge view should contain ${JSON.stringify(expected)}`)
+    }
+    const headings = [...container.querySelectorAll("h3")].map((h) => h.textContent)
+    assert.deepEqual(headings, ["setup", "testing"], "notes group under their topic headings")
+    const filter = container.querySelector("input[type='search']")
+    assert.ok(filter, "a text search box filters the knowledge lists")
+    const setValue = Object.getOwnPropertyDescriptor((dom.window as any).HTMLInputElement.prototype, "value")!.set!
+    setValue.call(filter, "npm ci")
+    await act(async () => {
+      filter.dispatchEvent(new dom.window.Event("input", { bubbles: true }))
+    })
+    const filtered = container.textContent ?? ""
+    assert.ok(filtered.includes("run npm ci at the worktree root"), "matching note stays")
+    assert.ok(!filtered.includes("node --test runs the suite"), "non-matching note filters out")
+    assert.ok(!filtered.includes("relate must be on PATH"), "non-matching topic note filters out")
+    assert.ok(filtered.includes("no symbols match"), "symbols filter to an empty state")
+    await unmount()
+  })
+
+  test("app routes #/attention and #/knowledge to their views", async () => {
+    const { container, unmount } = await render(<App pollInterval={60_000} />)
+    const goto = async (hash: string) => {
+      window.location.hash = hash
+      await act(async () => {
+        window.dispatchEvent(new dom.window.Event("hashchange"))
+      })
+    }
+    await goto("#/attention")
+    assert.ok(container.querySelector("a[href='#/features/alpha']"), "#/attention renders the attention view")
+    await goto("#/knowledge")
+    assert.ok(container.querySelector("input[type='search']"), "#/knowledge renders the knowledge view")
+    await goto("#/")
+    assert.ok((container.textContent ?? "").includes("gbuild features"), "#/ renders the feature list")
+    await goto("#/features/alpha")
+    assert.ok((container.textContent ?? "").includes("wave 0"), "#/features/<slug> still renders the graph detail")
+    await unmount()
+    window.location.hash = ""
   })
 
   test("detail view mounts InteractiveNvlWrapper with the fixture nodes and DEPENDS_ON rels", async () => {
