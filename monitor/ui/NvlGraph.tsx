@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { RefObject } from "react"
 import type NVL from "@neo4j-nvl/base"
-import type { Layout } from "@neo4j-nvl/base"
+import type { Layout, NvlOptions } from "@neo4j-nvl/base"
 import { InteractiveNvlWrapper } from "@neo4j-nvl/react"
 import type { GraphNode } from "./api.ts"
 
@@ -104,7 +104,7 @@ export function NvlGraph({ nodes, selectedSlug = null, onNodeClick, onCanvasDoub
     }
   }, [base, nodes, focus, selectedSlug])
 
-  const nvlOptions = useMemo(
+  const nvlOptions = useMemo<NvlOptions>(
     () => ({
       renderer: "canvas",
       layout,

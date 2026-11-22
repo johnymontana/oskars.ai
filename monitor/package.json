@@ -6,7 +6,8 @@
     "start": "node --import tsx index.ts",
     "build": "vite build",
     "dev": "vite",
-    "test": "node --import tsx --test test/*.test.ts test/*.test.tsx"
+    "test": "node --import tsx --test test/*.test.ts test/*.test.tsx",
+    "typecheck": "cd .. && tsc -p monitor/tsconfig.json"
   },
   "dependencies": {
     "@neo4j-nvl/base": "^2.1.0",

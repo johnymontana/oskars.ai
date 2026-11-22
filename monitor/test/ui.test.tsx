@@ -430,7 +430,7 @@ describe("monitor ui", () => {
       ["#/attention", "attention"],
       ["#/knowledge", "knowledge"],
     ] as const) {
-      const link = header.querySelector(`nav a[href='${href}']`)
+      const link: Element | null = header.querySelector(`nav a[href='${href}']`)
       assert.ok(link, `header nav links to ${href}`)
       assert.equal(link.textContent, label)
     }
