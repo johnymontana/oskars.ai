@@ -11,3 +11,6 @@ This is a repository for agent plugins and skills created by Oskar Hane.
   `index.ts` translates paths and references at load time rather than forking content. OpenCode
   distribution is via npm publish (git `::path:` subdir installs are not honored by bun/npm).
   See `plugins/gbuild/` for the reference implementation.
+- `monitor/` — a local web UI and REST API for watching gbuild feature runs. Standalone
+  node:http + tsx server (`src/`, no framework) plus a React 19 + Vite UI (`ui/`) that renders
+  the dependency graph with @neo4j-nvl/react. See `monitor/README.md`.
