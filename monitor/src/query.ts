@@ -1,6 +1,7 @@
 // Runs one Cypher script against a gbuild store through the relate CLI and
 // parses the jsonl rows. Every store read goes through queryStore, which is
-// always `relate query --read-only --mode jsonl` — the monitor never writes.
+// always `relate query --read-only --mode jsonl --max-rows 0` — the monitor
+// never writes, and never truncates (relate's default caps jsonl at 100 rows).
 import { spawn } from "node:child_process"
 
 export type Row = Record<string, unknown>
@@ -21,7 +22,7 @@ export function runRelate(args: string[], input: string): Promise<string> {
 }
 
 export async function queryStore(db: string, cypher: string): Promise<Row[]> {
-  const stdout = await runRelate(["query", "--read-only", "--database", db, "--mode", "jsonl"], cypher)
+  const stdout = await runRelate(["query", "--read-only", "--database", db, "--mode", "jsonl", "--max-rows", "0"], cypher)
   return stdout
     .split("\n")
     .filter(Boolean)
