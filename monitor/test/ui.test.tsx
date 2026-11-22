@@ -85,7 +85,7 @@ const { InteractiveNvlWrapper } = await import("@neo4j-nvl/react")
 const { FeatureList } = await import("../ui/FeatureList.tsx")
 const { GraphDetail } = await import("../ui/GraphDetail.tsx")
 const { AttentionView } = await import("../ui/AttentionView.tsx")
-const { KnowledgeView } = await import("../ui/KnowledgeView.tsx")
+const { KnowledgeView, toNvlKnowledgeGraph } = await import("../ui/KnowledgeView.tsx")
 const { toNvlGraph, NvlGraph } = await import("../ui/NvlGraph.tsx")
 const { TimelineTab } = await import("../ui/TimelineTab.tsx")
 const { App } = await import("../ui/App.tsx")
@@ -202,6 +202,75 @@ const QUERY_GRAPH_ROWS = [
   },
 ]
 
+// The knowledge graph for the same stores: the symbol both features define is
+// one merged node, and the two setup notes share one topic hub.
+const KNOWLEDGE_GRAPH = {
+  nodes: [
+    { id: "Feature:/repo/project-one:alpha", labels: ["Feature"], properties: { project: "/repo/project-one", feature: "alpha" } },
+    { id: "Feature:/repo/project-two:beta", labels: ["Feature"], properties: { project: "/repo/project-two", feature: "beta" } },
+    {
+      id: "Note:/repo/project-one:alpha:setup:run npm ci at the worktree root",
+      labels: ["Note"],
+      properties: { topic: "setup", text: "run npm ci at the worktree root", by_node: "a-impl" },
+    },
+    {
+      id: "Note:/repo/project-two:beta:setup:relate must be on PATH",
+      labels: ["Note"],
+      properties: { topic: "setup", text: "relate must be on PATH", by_node: "c-wire" },
+    },
+    {
+      id: "Symbol:toNvlGraph:monitor/ui/NvlGraph.tsx",
+      labels: ["Symbol"],
+      properties: { name: "toNvlGraph", file: "monitor/ui/NvlGraph.tsx", purpose: "maps graph nodes to NVL nodes/rels" },
+    },
+    { id: "Topic:setup", labels: ["Topic"], properties: { topic: "setup" } },
+  ],
+  rels: [
+    {
+      id: "DEFINES:Feature:/repo/project-one:alpha->Symbol:toNvlGraph:monitor/ui/NvlGraph.tsx:a-impl",
+      type: "DEFINES",
+      from: "Feature:/repo/project-one:alpha",
+      to: "Symbol:toNvlGraph:monitor/ui/NvlGraph.tsx",
+      properties: { project: "/repo/project-one", feature: "alpha", by_node: "a-impl" },
+    },
+    {
+      id: "DEFINES:Feature:/repo/project-two:beta->Symbol:toNvlGraph:monitor/ui/NvlGraph.tsx:c-wire",
+      type: "DEFINES",
+      from: "Feature:/repo/project-two:beta",
+      to: "Symbol:toNvlGraph:monitor/ui/NvlGraph.tsx",
+      properties: { project: "/repo/project-two", feature: "beta", by_node: "c-wire" },
+    },
+    {
+      id: "WROTE:Feature:/repo/project-one:alpha->Note:/repo/project-one:alpha:setup:run npm ci at the worktree root:a-impl",
+      type: "WROTE",
+      from: "Feature:/repo/project-one:alpha",
+      to: "Note:/repo/project-one:alpha:setup:run npm ci at the worktree root",
+      properties: { project: "/repo/project-one", feature: "alpha", by_node: "a-impl" },
+    },
+    {
+      id: "WROTE:Feature:/repo/project-two:beta->Note:/repo/project-two:beta:setup:relate must be on PATH:c-wire",
+      type: "WROTE",
+      from: "Feature:/repo/project-two:beta",
+      to: "Note:/repo/project-two:beta:setup:relate must be on PATH",
+      properties: { project: "/repo/project-two", feature: "beta", by_node: "c-wire" },
+    },
+    {
+      id: "ABOUT:Note:/repo/project-one:alpha:setup:run npm ci at the worktree root->Topic:setup:a-impl",
+      type: "ABOUT",
+      from: "Note:/repo/project-one:alpha:setup:run npm ci at the worktree root",
+      to: "Topic:setup",
+      properties: { project: "/repo/project-one", feature: "alpha", by_node: "a-impl" },
+    },
+    {
+      id: "ABOUT:Note:/repo/project-two:beta:setup:relate must be on PATH->Topic:setup:c-wire",
+      type: "ABOUT",
+      from: "Note:/repo/project-two:beta:setup:relate must be on PATH",
+      to: "Topic:setup",
+      properties: { project: "/repo/project-two", feature: "beta", by_node: "c-wire" },
+    },
+  ],
+}
+
 let fetchCalls: string[] = []
 globalThis.fetch = (async (input: any, init?: any) => {
   const path = String(input)
@@ -217,6 +286,7 @@ globalThis.fetch = (async (input: any, init?: any) => {
   }
   if (path === "/api/attention") return Response.json(ATTENTION)
   if (path === "/api/knowledge") return Response.json(KNOWLEDGE)
+  if (path === "/api/knowledge/graph") return Response.json(KNOWLEDGE_GRAPH)
   return new Response("not found", { status: 404 })
 }) as typeof fetch
 
@@ -529,6 +599,53 @@ describe("monitor ui", () => {
     assert.ok(!filtered.includes("relate must be on PATH"), "non-matching topic note filters out")
     assert.ok(filtered.includes("no symbols match"), "symbols filter to an empty state")
     await unmount()
+  })
+
+  test("knowledge graph: merged symbol nodes connect to every defining feature and notes to their topic hub", async () => {
+    const ref = React.createRef<any>()
+    const { nodes, rels } = toNvlKnowledgeGraph(KNOWLEDGE_GRAPH as any)
+    const { unmount } = await render(
+      <InteractiveNvlWrapper ref={ref} nodes={nodes} rels={rels} nvlOptions={{ renderer: "canvas", disableWebGL: true }} />,
+    )
+    const symbolId = "Symbol:toNvlGraph:monitor/ui/NvlGraph.tsx"
+    const symbolNodes = (ref.current.getNodes() as any[]).filter((n) => n.id === symbolId)
+    assert.equal(symbolNodes.length, 1, "a symbol defined in two stores renders as one merged node")
+    assert.equal(ref.current.getNodeById(symbolId).caption, "toNvlGraph", "symbol nodes are captioned by name")
+    assert.deepEqual(
+      (ref.current.getRelationships() as any[])
+        .filter((r) => r.to === symbolId)
+        .map((r) => r.from)
+        .sort(),
+      ["Feature:/repo/project-one:alpha", "Feature:/repo/project-two:beta"],
+      "the merged symbol connects to both features that define it",
+    )
+    assert.deepEqual(
+      (ref.current.getRelationships() as any[])
+        .filter((r) => r.to === "Topic:setup")
+        .map((r) => r.from)
+        .sort(),
+      [
+        "Note:/repo/project-one:alpha:setup:run npm ci at the worktree root",
+        "Note:/repo/project-two:beta:setup:relate must be on PATH",
+      ],
+      "notes connect to their shared topic hub",
+    )
+    assert.equal(ref.current.getNodeById("Topic:setup").caption, "setup", "topic hubs are captioned by topic")
+    await unmount()
+  })
+
+  test("#/knowledge renders the knowledge graph with the filterable table still present", async () => {
+    const { container, unmount } = await render(<App pollInterval={60_000} />)
+    window.location.hash = "#/knowledge"
+    await act(async () => {
+      window.dispatchEvent(new dom.window.Event("hashchange"))
+    })
+    assert.ok(container.querySelector("#NVL_interactive-wrapper"), "#/knowledge mounts the knowledge graph")
+    assert.ok(container.querySelector("input[type='search']"), "the filter box is still present")
+    assert.ok(container.querySelector("table"), "the symbols table is still present")
+    assert.ok((container.textContent ?? "").includes("run npm ci at the worktree root"), "notes list still renders")
+    await unmount()
+    window.location.hash = ""
   })
 
   test("app routes #/attention and #/knowledge to their views", async () => {
