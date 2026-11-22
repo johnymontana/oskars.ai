@@ -1,0 +1,187 @@
+/* gbuild monitor theme: hand-rolled dark palette, six-state status color
+   language, typography scale, and app chrome. Every color is a CSS custom
+   property so graph nodes, status chips, and timeline bars can share one
+   language. No framework, no dependencies. */
+
+:root {
+  /* Dark palette */
+  --bg: #0d1117; /* app background */
+  --bg-raised: #161b22; /* cards, panels, header */
+  --bg-inset: #0a0e14; /* wells inside raised surfaces */
+  --border: #2d333f; /* hairlines and card outlines */
+  --text: #e6e9ef; /* primary text */
+  --text-dim: #8b94a3; /* secondary text, captions */
+  --accent: #6aa3ff; /* links and interactive affordances */
+
+  /* Status color language — the one set used everywhere */
+  --status-completed: #4caf7d; /* green */
+  --status-in-progress: #e2a336; /* amber */
+  --status-frontier: #5b9dff; /* blue */
+  --status-blocked: #8b94a3; /* gray */
+  --status-failed: #e5534b; /* red */
+  --status-cancelled: #5a6270; /* dimmed */
+
+  /* Typography */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+
+h1 {
+  font-size: var(--text-2xl);
+}
+h2 {
+  font-size: var(--text-xl);
+}
+h3 {
+  font-size: var(--text-lg);
+}
+h4 {
+  font-size: var(--text-md);
+}
+h1,
+h2,
+h3,
+h4 {
+  line-height: 1.25;
+  margin: 0.75em 0 0.4em;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+code,
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+/* App chrome: header with route navigation */
+.app-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+  padding: 0.6rem 1.25rem;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+.app-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+.app-nav {
+  display: flex;
+  gap: 1rem;
+  font-size: var(--text-sm);
+}
+
+.app-main {
+  padding: 1rem 1.25rem;
+  max-width: 1100px;
+}
+
+/* Tables of features / fields */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--text-sm);
+}
+th,
+td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+th {
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Node cards */
+article {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+}
+article h3 {
+  margin-top: 0;
+}
+
+/* Status chips — the status color language as text + border */
+.status-chip {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  margin: 0.1rem 0.25rem 0.1rem 0;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.status-chip[data-status="completed"] {
+  color: var(--status-completed);
+}
+.status-chip[data-status="in_progress"] {
+  color: var(--status-in-progress);
+}
+.status-chip[data-status="frontier"] {
+  color: var(--status-frontier);
+}
+.status-chip[data-status="blocked"] {
+  color: var(--status-blocked);
+}
+.status-chip[data-status="failed"] {
+  color: var(--status-failed);
+}
+.status-chip[data-status="cancelled"] {
+  color: var(--status-cancelled);
+}
+
+/* Empty, loading and error states */
+.state {
+  padding: 1.5rem 1rem;
+  border-radius: 6px;
+  font-size: var(--text-sm);
+}
+.state-empty {
+  color: var(--text-dim);
+  border: 1px dashed var(--border);
+}
+.state-loading {
+  color: var(--text-dim);
+}
+.state-error {
+  color: var(--status-failed);
+  background: var(--bg-raised);
+  border: 1px solid var(--status-failed);
+}

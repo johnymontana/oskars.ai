@@ -6,6 +6,7 @@
 // ResizeObserver are stubbed before NVL is imported; that is enough for NVL's
 // canvas renderer to initialize and hold the fixture nodes/rels.
 import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
 import { before, describe, mock, test } from "node:test"
 import type { ReactElement } from "react"
 import { JSDOM } from "jsdom"
@@ -82,6 +83,8 @@ const { InteractiveNvlWrapper } = await import("@neo4j-nvl/react")
 const { FeatureList } = await import("../ui/FeatureList.tsx")
 const { GraphDetail } = await import("../ui/GraphDetail.tsx")
 const { toNvlGraph } = await import("../ui/NvlGraph.tsx")
+const { App } = await import("../ui/App.tsx")
+const { StatusChip } = await import("../ui/StatusChip.tsx")
 
 const FEATURES = [
   { project: "/repo/project-one", slug: "alpha", destination: "Alpha feature done.", status_counts: { completed: 1, frontier: 1 } },
@@ -215,6 +218,47 @@ describe("monitor ui", () => {
     assert.ok(wave0 !== -1 && wave1 !== -1 && wave0 < wave1, "waves render in order")
     assert.ok(container.querySelector("#NVL_interactive-wrapper"), "detail view mounts the NVL wrapper")
     assert.ok(container.querySelector("canvas"), "canvas renderer draws into the container")
+    await unmount()
+  })
+
+  test("theme stylesheet defines the status palette and status chips carry the status colors", async () => {
+    const css = readFileSync(new URL("../ui/theme.css", import.meta.url), "utf8")
+    const entry = readFileSync(new URL("../ui/main.tsx", import.meta.url), "utf8")
+    assert.ok(
+      entry.includes('import "./theme.css"'),
+      "the UI entry point applies the theme stylesheet app-wide",
+    )
+    for (const token of ["--bg", "--bg-raised", "--border", "--text", "--text-dim", "--accent"]) {
+      assert.ok(css.includes(`${token}:`), `theme defines the dark palette token ${token}`)
+    }
+    for (const status of ["completed", "in_progress", "frontier", "blocked", "failed", "cancelled"]) {
+      const token = `--status-${status.replaceAll("_", "-")}`
+      assert.ok(css.includes(`${token}:`), `theme defines ${token}`)
+      assert.ok(
+        new RegExp(`\\.status-chip\\[data-status="${status}"\\][^}]*var\\(${token}\\)`).test(css),
+        `status chips for ${status} carry ${token}`,
+      )
+      const { container, unmount } = await render(<StatusChip status={status} />)
+      const chip = container.querySelector(".status-chip")
+      assert.ok(chip, "chip renders with the status-chip class")
+      assert.equal(chip.getAttribute("data-status"), status)
+      await unmount()
+    }
+  })
+
+  test("app chrome: header navigates to the features, attention and knowledge routes", async () => {
+    const { container, unmount } = await render(<App pollInterval={60_000} />)
+    const header = container.querySelector("header.app-header")
+    assert.ok(header, "app renders a header")
+    for (const [href, label] of [
+      ["#/", "features"],
+      ["#/attention", "attention"],
+      ["#/knowledge", "knowledge"],
+    ] as const) {
+      const link = header.querySelector(`nav a[href='${href}']`)
+      assert.ok(link, `header nav links to ${href}`)
+      assert.equal(link.textContent, label)
+    }
     await unmount()
   })
 
