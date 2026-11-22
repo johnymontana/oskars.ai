@@ -4,9 +4,9 @@
 import type { AttentionItem } from "../src/attention.ts"
 import type { FeatureSummary } from "../src/features.ts"
 import type { GraphDetail, GraphNode } from "../src/graph.ts"
-import type { Knowledge } from "../src/knowledge.ts"
+import type { Knowledge, KnowledgeGraph, KnowledgeGraphNode } from "../src/knowledge.ts"
 
-export type { AttentionItem, FeatureSummary, GraphDetail, GraphNode, Knowledge }
+export type { AttentionItem, FeatureSummary, GraphDetail, GraphNode, Knowledge, KnowledgeGraph, KnowledgeGraphNode }
 
 const get = async <T>(path: string): Promise<T> => {
   const res = await fetch(path)
@@ -20,6 +20,8 @@ export const fetchGraph = (slug: string) => get<GraphDetail>(`/api/features/${en
 
 export const fetchAttention = () => get<AttentionItem[]>("/api/attention")
 export const fetchKnowledge = () => get<Knowledge>("/api/knowledge")
+
+export const fetchKnowledgeGraph = () => get<KnowledgeGraph>("/api/knowledge/graph")
 
 export type QueryRow = Record<string, unknown>
 

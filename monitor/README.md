@@ -69,9 +69,11 @@ Run from this directory:
 - `#/attention` — attention dashboard: every failed and blocked node across
   all stores with project, feature, state, the dependencies it waits on, and
   its last failed criteria.
-- `#/knowledge` — knowledge browser: implementer notes grouped by topic and
-  symbols (name, file, purpose, author) across all projects, filterable with
-  a text search box.
+- `#/knowledge` — knowledge browser, topped by the cross-store knowledge
+  graph: symbols merged by name+file across projects, connected to every
+  defining feature, and notes linked through shared topic hubs. Below it the
+  filterable lists of implementer notes grouped by topic and symbols (name,
+  file, purpose, author) across all projects.
 
 All views poll the API — default every 3000ms — and update in place. Override
 the interval with the `?poll=<ms>` query parameter, e.g.
@@ -95,6 +97,11 @@ the interval with the `?poll=<ms>` query parameter, e.g.
   properties }` / `{ id, kind, type, start_node, end_node, properties }`).
   `400` for an invalid body, invalid Cypher or a rejected write, `404` for an
   unknown feature slug.
+- `GET /api/knowledge/graph` — the same knowledge as a cross-store graph:
+  `Symbol` nodes merged by name+file, individual `Note` nodes linked to
+  shared `Topic` hubs, one `Feature` node per store, and
+  `DEFINES`/`WROTE`/`ABOUT` rels carrying `project`, `feature` and `by_node`
+  provenance: `{ nodes: [{ id, labels, properties }], rels: [{ id, type, from, to, properties }] }`.
 
 ## Layout
 
