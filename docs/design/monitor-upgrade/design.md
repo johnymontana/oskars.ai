@@ -52,9 +52,23 @@ notes/symbols) is explorable across projects.
    (node:http, no framework). Alternative ruled out: @neo4j-ndl/react Needle design system (adds a
    dependency and a design language the repo doesn't otherwise use).
 
+## Decisions (continued)
+
+5. **Information architecture: tabs + two top-level routes** (round 2). Feature detail gets tabs —
+   Graph | Timeline | Acceptance | Repairs — keeping per-feature context together. The attention
+   dashboard and the knowledge browser are top-level routes (`#/attention`, `#/knowledge`).
+   Alternatives ruled out: all-separate-routes (too many navigation hops) and one-long-page
+   (heavy scrolling, and the graph is the primary surface, not a section of a page).
+6. **Attention placement: landing summary + dedicated route** (round 2). The feature list landing
+   gains a "needs attention" section on top (failed/blocked nodes across all stores); `#/attention`
+   carries the full detail. Alternatives ruled out: route-only (hides urgency) and
+   attention-as-landing (demotes the feature list, which is the app's hub).
+7. **Timeline: per-feature only** (round 2), as a tab in the feature detail. Alternative ruled out:
+   a cross-project global timeline (concurrent runs on one axis) — no evidence anyone compares runs
+   across projects in time; revisit if asked.
+
 ## Open questions
 
-- Information architecture: tabs inside the feature detail vs separate top-level pages for the new
-  surfaces (timeline, acceptance, repairs, knowledge, attention).
-- Where the attention dashboard surfaces: landing-page section vs its own route.
-- Timeline scope: per-feature only, or also a cross-project view.
+- What happens to the current long-scroll node cards now that the graph + side panel is the primary
+  detail surface.
+- Open floor: anything the rounds haven't covered.
