@@ -7,14 +7,17 @@
 // relationship type present in the data with its color; layer toggles sit with
 // it. Layout is hierarchical-by-wave for skeleton-only and switches to
 // force-directed once any layer is on; the manual toggle still works. With the
-// contract layer on, FROM rels caption the recorded value flowing through them.
-import { useMemo, useRef, useState } from "react"
+// contract layer on, FROM rels caption the recorded value flowing through
+// them. Double-click a node to focus its transitive upstream+downstream
+// neighborhood over DEPENDS_ON (restyle only); Esc or a canvas double-click
+// resets the focus.
+import { useEffect, useMemo, useState } from "react"
 import type { RefObject } from "react"
 import type NVL from "@neo4j-nvl/base"
-import type { Layout, NvlOptions } from "@neo4j-nvl/base"
-import { InteractiveNvlWrapper } from "@neo4j-nvl/react"
+import type { Layout } from "@neo4j-nvl/base"
 import type { StoreGraph, StoreGraphNode, StoreGraphRel } from "./api.ts"
-import { resolveToken, statusColor } from "./NvlGraph.tsx"
+import { resolveToken, statusColor } from "./colors.ts"
+import { GraphFrame } from "./GraphFrame.tsx"
 
 export type Layer = "contract" | "acceptance" | "reviews" | "knowledge"
 
@@ -50,6 +53,11 @@ export const relTypeColor = (type: string) =>
   FALLBACK_REL_COLORS.DEPENDS_ON!
 
 const elementColor = () => resolveToken("--accent") || "#6aa3ff"
+
+// Alpha suffix appended to a hex color to dim elements outside the focused
+// neighborhood — a restyle, no refetch.
+const DIM_ALPHA = "2e"
+const dimColor = (color: string | undefined) => (color ? `${color}${DIM_ALPHA}` : color)
 
 const truncate = (text: string, max = 40) => (text.length > max ? `${text.slice(0, max)}…` : text)
 const valueText = (value: unknown) => (value == null ? null : truncate(JSON.stringify(value) ?? ""))
@@ -106,6 +114,30 @@ export const toStoreNvl = (graph: StoreGraph, layers: ReadonlySet<Layer>, status
   }
 }
 
+// The element itself plus its transitive upstream (dependencies) and
+// downstream (dependents) closure over DEPENDS_ON.
+export const neighborhood = (graph: StoreGraph, id: string): Set<string> => {
+  const deps = new Map<string, string[]>()
+  const down = new Map<string, string[]>()
+  for (const r of graph.rels) {
+    if (r.type !== "DEPENDS_ON") continue
+    deps.set(r.from, [...(deps.get(r.from) ?? []), r.to])
+    down.set(r.to, [...(down.get(r.to) ?? []), r.from])
+  }
+  const seen = new Set([id])
+  const queue = [id]
+  while (queue.length > 0) {
+    const current = queue.pop() as string
+    for (const next of [...(deps.get(current) ?? []), ...(down.get(current) ?? [])]) {
+      if (!seen.has(next)) {
+        seen.add(next)
+        queue.push(next)
+      }
+    }
+  }
+  return seen
+}
+
 export interface StoreGraphExplorerProps {
   graph: StoreGraph
   /** Derived status per GbuildNode slug (frontier/blocked come from /graph). */
@@ -126,13 +158,22 @@ export function StoreGraphExplorer({
   onCanvasDoubleClick,
   nvlRef,
 }: StoreGraphExplorerProps) {
-  const internalRef = useRef<NVL>(null)
-  const ref = nvlRef ?? internalRef
   const [layers, setLayers] = useState<ReadonlySet<Layer>>(new Set())
   // null = follow the automatic layout for the current layers; the toolbar
   // toggle pins an explicit choice until the layers change again.
   const [pinnedLayout, setPinnedLayout] = useState<Layout | null>(null)
   const layout: Layout = pinnedLayout ?? (layers.size > 0 ? "forceDirected" : "hierarchical")
+  const [focus, setFocus] = useState<string | null>(null)
+
+  // Esc resets the neighborhood focus.
+  useEffect(() => {
+    if (!focus) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFocus(null)
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [focus])
 
   const toggleLayer = (layer: Layer) => {
     setLayers((current) => {
@@ -145,60 +186,40 @@ export function StoreGraphExplorer({
   }
 
   const { nodes, rels } = useMemo(() => toStoreNvl(graph, layers, statusBySlug), [graph, layers, statusBySlug])
-  const styledNodes = useMemo(
-    () => nodes.map((n) => ({ ...n, selected: n.id === selectedId })),
-    [nodes, selectedId],
-  )
-
-  const nvlOptions = useMemo<NvlOptions>(
-    () => ({
-      renderer: "canvas",
-      layout,
-      layoutOptions: layout === "hierarchical" ? { direction: "left" as const } : undefined,
-    }),
-    [layout],
-  )
-
-  const zoomBy = (factor: number) => {
-    const scale = ref.current?.getScale()
-    if (scale) ref.current?.setZoom(scale * factor)
-  }
+  const styled = useMemo(() => {
+    const hood = focus ? neighborhood(graph, focus) : null
+    return {
+      nodes: nodes.map((n) => ({
+        ...n,
+        selected: n.id === selectedId,
+        color: hood && !hood.has(n.id) ? dimColor(n.color) : n.color,
+      })),
+      rels: rels.map((r) => ({
+        ...r,
+        color: hood && !(hood.has(r.from) && hood.has(r.to)) ? dimColor(r.color) : r.color,
+      })),
+    }
+  }, [nodes, rels, graph, focus, selectedId])
 
   const relTypesPresent = useMemo(() => [...new Set(graph.rels.map((r) => r.type))].sort(), [graph])
 
   return (
-    <div className="graph-frame">
-      <div className="graph-toolbar">
-        <button
-          type="button"
-          aria-pressed={layout === "forceDirected"}
-          onClick={() => setPinnedLayout(layout === "hierarchical" ? "forceDirected" : "hierarchical")}
-        >
-          layout: {layout === "hierarchical" ? "hierarchical" : "force-directed"}
-        </button>
-        <button type="button" aria-label="zoom in" onClick={() => zoomBy(1.25)}>
-          +
-        </button>
-        <button type="button" aria-label="zoom out" onClick={() => zoomBy(0.8)}>
-          −
-        </button>
-        <button type="button" aria-label="fit graph" onClick={() => ref.current?.fit(nodes.map((n) => n.id))}>
-          fit
-        </button>
-      </div>
-      <div style={{ width: "100%", height: "480px" }}>
-        <InteractiveNvlWrapper
-          ref={ref}
-          nodes={styledNodes}
-          rels={rels}
-          nvlOptions={nvlOptions}
-          mouseEventCallbacks={{
-            onZoomAndPan: true,
-            onNodeClick: (node: { id: string }) => onNodeClick?.(node.id),
-            onCanvasDoubleClick: () => onCanvasDoubleClick?.(),
-          }}
-        />
-      </div>
+    <GraphFrame
+      nodes={styled.nodes}
+      rels={styled.rels}
+      layout={layout}
+      onLayoutChange={setPinnedLayout}
+      nvlRef={nvlRef}
+      mouseEventCallbacks={{
+        onZoomAndPan: true,
+        onNodeClick: (node: { id: string }) => onNodeClick?.(node.id),
+        onNodeDoubleClick: (node: { id: string }) => setFocus(node.id),
+        onCanvasDoubleClick: () => {
+          setFocus(null)
+          onCanvasDoubleClick?.()
+        },
+      }}
+    >
       <div className="graph-legend">
         <span className="legend-group">
           layers:
@@ -222,6 +243,6 @@ export function StoreGraphExplorer({
           ))}
         </span>
       </div>
-    </div>
+    </GraphFrame>
   )
 }

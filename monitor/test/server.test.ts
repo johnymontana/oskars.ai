@@ -12,6 +12,7 @@ import { after, before, describe, test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { loadConfig } from "../src/config.ts"
 import { startServer } from "../src/server.ts"
+import { storeGraph } from "../src/storegraph.ts"
 import type { Server } from "node:http"
 
 const hasRelate = spawnSync("relate", ["--version"]).status === 0
@@ -317,6 +318,39 @@ describe("monitor server", { skip: !hasRelate }, () => {
 
     const missing = await get("/api/features/nope/store-graph")
     assert.equal(missing.status, 404)
+  })
+
+  test("store-graph: an element missing its owner edge fails with an explicit error and no id contains undefined", async () => {
+    // The healthy fixture builds ids only from real identifying properties.
+    const { status, body } = await get("/api/features/alpha/store-graph")
+    assert.equal(status, 200)
+    for (const id of [...body.nodes.map((n: any) => n.id), ...body.rels.map((r: any) => r.id)]) {
+      assert.ok(!id.includes("undefined"), `id ${JSON.stringify(id)} contains "undefined"`)
+    }
+
+    // A Field with no INPUT/OUTPUT owner edge (a broken store) fails loudly
+    // instead of producing a "Field:undefined:undefined:…" id. The store lives
+    // outside the discovered roots so the other tests are unaffected.
+    const orphanRoot = mkdtempSync(join(tmpdir(), "gbuild-monitor-orphan-"))
+    try {
+      const db = join(orphanRoot, ".git", "gbuild", "orphan", "db")
+      mkdirSync(db, { recursive: true })
+      run(db, schema, ["--snapshot-format", "json"])
+      run(
+        db,
+        `
+.begin
+CREATE (:Field {name: 'value', shape: '<integer>'});
+.commit
+`,
+      )
+      await assert.rejects(
+        storeGraph({ project: orphanRoot, slug: "orphan", db }),
+        /Field "value" has no INPUT\/OUTPUT edge from an owning GbuildNode/,
+      )
+    } finally {
+      rmSync(orphanRoot, { recursive: true, force: true })
+    }
   })
 
   test("POST /api/features/:slug/query runs read-only Cypher, rejects writes, caps at 500 rows", async () => {

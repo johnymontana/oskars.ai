@@ -48,7 +48,11 @@ export function GraphDetail({
   nvlRef?: RefObject<NVL | null>
 }) {
   const { data, error } = usePoll(() => fetchGraph(slug), pollInterval)
-  const { data: storeData, error: storeError } = usePoll(() => fetchStoreGraph(slug), pollInterval)
+  // The store graph backs only the Graph tab; other tabs never fetch it.
+  const { data: storeData, error: storeError } = usePoll(
+    tab === "graph" ? () => fetchStoreGraph(slug) : null,
+    pollInterval,
+  )
   const { data: knowledge } = usePoll(fetchKnowledge, pollInterval)
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
   const [selectedElement, setSelectedElement] = useState<StoreGraphNode | null>(null)

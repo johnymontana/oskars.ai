@@ -4,9 +4,10 @@
 // render as an NVL graph. Rejected statements show the server's error message.
 import { useState } from "react"
 import type { FormEvent } from "react"
-import { InteractiveNvlWrapper } from "@neo4j-nvl/react"
+import type { Layout } from "@neo4j-nvl/base"
 import { postQuery } from "./api.ts"
 import type { QueryRow } from "./api.ts"
+import { GraphFrame } from "./GraphFrame.tsx"
 
 // Node/rel values inside rows serialize the relate jsonl way:
 // { id, kind: "node", labels, properties } and
@@ -71,6 +72,7 @@ export function QueryTab({ slug }: { slug: string }) {
   const [rows, setRows] = useState<QueryRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
+  const [layout, setLayout] = useState<Layout>("forceDirected")
 
   const run = async (event: FormEvent) => {
     event.preventDefault()
@@ -131,11 +133,7 @@ export function QueryTab({ slug }: { slug: string }) {
         </table>
       )}
       {(graph.nodes.length > 0 || graph.rels.length > 0) && (
-        <div className="graph-frame">
-          <div style={{ width: "100%", height: "320px" }}>
-            <InteractiveNvlWrapper nodes={graph.nodes} rels={graph.rels} nvlOptions={{ renderer: "canvas" }} />
-          </div>
-        </div>
+        <GraphFrame nodes={graph.nodes} rels={graph.rels} layout={layout} onLayoutChange={setLayout} height={320} />
       )}
     </section>
   )
