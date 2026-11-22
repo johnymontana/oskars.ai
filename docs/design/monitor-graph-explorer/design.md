@@ -66,14 +66,55 @@ type (`DEPENDS_ON`, `INPUT`, `OUTPUT`, `FROM`, `SATISFIES`, `HAS_ACCEPTANCE`, `R
    clicked).
 5. **Brainstorm extras in scope** (round 1): read-only Cypher console, dataflow overlay (folded
    into the contract layer), and cross-feature knowledge graph. Run replay/animation is out.
+6. **Cross-feature knowledge graph lives on `#/knowledge` as a graph mode** (round 2), keeping the
+   filterable table below it — one home for "what runs learned". Alternative ruled out: a separate
+   route (splits knowledge across two screens).
+7. **Cross-store linkage: Symbol by name+file, Notes by shared topic** (round 2). Symbols with the
+   same name and file across features are one merged node, edged to each defining feature/node;
+   notes stay individual (their texts differ) and connect through a shared topic hub node.
+   Alternatives ruled out: file-only (couples unrelated helpers in one file) and name-only
+   (false-merges common identifiers like `formatValue`).
+8. **Cypher console is a store-scoped feature tab** (round 2) — a `Query` tab on the feature
+   detail, running against that feature's store. Alternative ruled out: a top-level route with a
+   store picker (stores are separate DBs; cross-store queries are impossible anyway, so the picker
+   buys nothing).
+9. **Query results render as a table, plus a mini NVL graph when rows contain nodes/rels**
+   (round 2). Alternative ruled out: table-only (the graph structure of a result — the whole point
+   of the console — stays invisible).
+10. **Layout auto-switches to force-directed when any extra layer is on** (round 2); skeleton-only
+    keeps hierarchical-by-wave, and the manual layout toggle still works. Alternatives ruled out:
+    hierarchical-always with satellites pinned to their owner (cramped wave lanes) and
+    manual-only (a bad default exactly when density arrives).
 
-## Open questions
+## Mechanism notes (settled, for plan to decompose)
 
-- Placement and shape of the cross-feature knowledge graph (route vs. tab; what links symbols and
-  notes across stores).
-- Cypher console placement (feature tab vs. top-level route) and result rendering (table vs.
-  table + graph when rows contain nodes).
-- Layout behavior when extra layers are on: hierarchical-by-wave suits the `DEPENDS_ON` DAG;
-  what happens when Fields/Reviews/Notes join the canvas.
-- API shape: extend `GET /api/features/:slug/graph` vs. new endpoints for the full store graph,
-  the ad-hoc query, and the knowledge graph.
+- **The Graph tab becomes the explorer.** The existing feature-detail Graph tab gains the layer
+  toggles; its default layers (skeleton only) render exactly today's view. No new route for the
+  full-store graph.
+- **Full store graph API** — new endpoint `GET /api/features/:slug/store-graph` returning raw
+  elements: `nodes: [{ id, labels, properties }]`, `rels: [{ id, type, from, to }]`. `GET
+  /api/features/:slug/graph` stays unchanged (the curated view feeding the existing tabs). Element
+  ids are deterministic, built from each label's identifying properties (`slug` for `GbuildNode`,
+  `id` for `Acceptance`, owner+`name`+direction for `Field`, node+`attempt` for `Review`,
+  node+topic+text for `Note`, node+`name` for `Symbol`, `feature` for `Feature`) — stable across
+  polls without relying on engine-internal ids.
+- **Query console API** — `POST /api/features/:slug/query`, body `{ cypher: string }`, executed
+  through the same `relate query --read-only --mode jsonl` path as every other store read
+  (writes are rejected engine-side). Results capped server-side (500 rows). The UI detects
+  node/rel-shaped values in result rows (`labels`+`properties` maps) and renders them as a mini
+  NVL graph beside the table.
+- **Knowledge graph API** — new endpoint `GET /api/knowledge/graph`: merged Symbol nodes
+  (name+file), individual Note nodes linked to shared topic hubs, Feature nodes, and
+  `DEFINES`/`WROTE`/`ABOUT` edges carrying `project`, `feature`, `by_node` provenance. Built
+  server-side from the same per-store reads `knowledge.ts` already does.
+- **Generalized element panel** — today's `NodePanel` becomes an element panel: for a
+  `GbuildNode` it renders exactly what `NodePanel` shows today (properties, acceptance, fields,
+  reviews, notes, symbols); for other labels it renders label, all properties, and connected
+  elements; for a relationship it renders type, endpoints, and properties.
+- **Legend doubles as the layer control** — the on-screen legend lists relationship types with
+  their colors; the layer toggles sit with it as one "layers & legend" overlay on the graph frame.
+- **Rel-type color palette** joins the theme tokens (`--rel-*` alongside `--status-*`), resolved
+  at render time like the status colors.
+- **Dataflow overlay detail** — with the contract layer on, `FROM` edges get a distinct
+  emphasized color and their caption shows the recorded value (truncated); `Field` node captions
+  show `name: value`.
