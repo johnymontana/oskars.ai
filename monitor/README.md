@@ -45,13 +45,21 @@ Run from this directory:
 ## Using the UI
 
 - `#/` — feature list: project path, slug, destination, and per-status node
-  counts for every discovered store.
+  counts for every discovered store, topped by a needs-attention section
+  listing the failed and blocked nodes across all stores (each links to its
+  feature).
 - `#/features/<slug>` — graph detail: the dependency graph rendered with
   [@neo4j-nvl/react](https://neo4j.com/docs/nvl/current/) (canvas renderer),
   plus nodes grouped by wave with status, acceptance criteria, input/output
   field values, and review verdicts.
+- `#/attention` — attention dashboard: every failed and blocked node across
+  all stores with project, feature, state, the dependencies it waits on, and
+  its last failed criteria.
+- `#/knowledge` — knowledge browser: implementer notes grouped by topic and
+  symbols (name, file, purpose, author) across all projects, filterable with
+  a text search box.
 
-Both views poll the API — default every 3000ms — and update in place. Override
+All views poll the API — default every 3000ms — and update in place. Override
 the interval with the `?poll=<ms>` query parameter, e.g.
 `http://localhost:8420/?poll=10000#/`.
 
