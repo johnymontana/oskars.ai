@@ -88,9 +88,12 @@ export async function storeGraph(store: Store): Promise<StoreGraph> {
   }
 
   const ids = new Map<number, string>()
-  for (const n of rawNodes) ids.set(n.id, nodeId(n))
   const nodes: StoreGraphNode[] = rawNodes
-    .map((n) => ({ id: ids.get(n.id) ?? `Node:${n.id}`, labels: n.labels, properties: n.properties }))
+    .map((n) => {
+      const id = nodeId(n)
+      ids.set(n.id, id)
+      return { id, labels: n.labels, properties: n.properties }
+    })
     .sort((a, b) => a.id.localeCompare(b.id))
   const rels: StoreGraphRel[] = rawRels
     .flatMap((r) => {

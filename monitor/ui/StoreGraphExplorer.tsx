@@ -142,9 +142,10 @@ export interface StoreGraphExplorerProps {
   graph: StoreGraph
   /** Derived status per GbuildNode slug (frontier/blocked come from /graph). */
   statusBySlug: ReadonlyMap<string, string>
-  /** Element id shown in the side panel; its NVL node is marked selected. */
+  /** Element id shown in the side panel; its NVL node or rel is marked selected. */
   selectedId?: string | null
   onNodeClick?: (id: string) => void
+  onRelClick?: (id: string) => void
   onCanvasDoubleClick?: () => void
   /** Access to the NVL instance (zoom/fit controls, tests). */
   nvlRef?: RefObject<NVL | null>
@@ -155,6 +156,7 @@ export function StoreGraphExplorer({
   statusBySlug,
   selectedId = null,
   onNodeClick,
+  onRelClick,
   onCanvasDoubleClick,
   nvlRef,
 }: StoreGraphExplorerProps) {
@@ -196,6 +198,7 @@ export function StoreGraphExplorer({
       })),
       rels: rels.map((r) => ({
         ...r,
+        selected: r.id === selectedId,
         color: hood && !(hood.has(r.from) && hood.has(r.to)) ? dimColor(r.color) : r.color,
       })),
     }
@@ -213,6 +216,7 @@ export function StoreGraphExplorer({
       mouseEventCallbacks={{
         onZoomAndPan: true,
         onNodeClick: (node: { id: string }) => onNodeClick?.(node.id),
+        onRelationshipClick: (rel: { id: string }) => onRelClick?.(rel.id),
         onNodeDoubleClick: (node: { id: string }) => setFocus(node.id),
         onCanvasDoubleClick: () => {
           setFocus(null)
@@ -235,12 +239,15 @@ export function StoreGraphExplorer({
           ))}
         </span>
         <span className="legend-group">
-          {relTypesPresent.map((type) => (
-            <span key={type} className="legend-item">
-              <span className="legend-swatch" data-color={relTypeColor(type)} style={{ backgroundColor: relTypeColor(type) }} />
-              {type}
-            </span>
-          ))}
+          {relTypesPresent.map((type) => {
+            const color = relTypeColor(type)
+            return (
+              <span key={type} className="legend-item">
+                <span className="legend-swatch" data-color={color} style={{ backgroundColor: color }} />
+                {type}
+              </span>
+            )
+          })}
         </span>
       </div>
     </GraphFrame>

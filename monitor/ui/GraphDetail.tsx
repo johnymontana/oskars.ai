@@ -2,7 +2,7 @@
 // explorer — dependency skeleton with toggleable contract/acceptance/reviews/
 // knowledge layers, a relationship-type legend, and a side panel opened from
 // the graph or the compact wave list, NodePanel for GbuildNode elements and a
-// generic element panel for the rest), Timeline (per-node run bars on a shared
+// generic element panel for other nodes and relationships), Timeline (per-node run bars on a shared
 // time axis), Acceptance (feature criteria with their covering nodes), Repairs
 // (per-node review attempt history) and Query (ad-hoc read-only Cypher
 // console). Polls /api/features/:slug/graph, /api/features/:slug/store-graph
@@ -11,7 +11,7 @@ import { useEffect, useState } from "react"
 import type { RefObject } from "react"
 import type NVL from "@neo4j-nvl/base"
 import type { GraphNode } from "../src/graph.ts"
-import type { StoreGraphNode } from "../src/storegraph.ts"
+import type { StoreGraphNode, StoreGraphRel } from "../src/storegraph.ts"
 import { AcceptanceTab } from "./AcceptanceTab.tsx"
 import { fetchGraph, fetchKnowledge, fetchStoreGraph } from "./api.ts"
 import { ElementPanel } from "./ElementPanel.tsx"
@@ -56,21 +56,23 @@ export function GraphDetail({
   const { data: knowledge } = usePoll(fetchKnowledge, pollInterval)
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
   const [selectedElement, setSelectedElement] = useState<StoreGraphNode | null>(null)
+  const [selectedRel, setSelectedRel] = useState<StoreGraphRel | null>(null)
 
   const clearSelection = () => {
     setSelectedSlug(null)
     setSelectedElement(null)
+    setSelectedRel(null)
   }
 
   // Esc closes the side panel.
   useEffect(() => {
-    if (!selectedSlug && !selectedElement) return
+    if (!selectedSlug && !selectedElement && !selectedRel) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") clearSelection()
     }
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
-  }, [selectedSlug, selectedElement])
+  }, [selectedSlug, selectedElement, selectedRel])
 
   if (error) return (
     <p role="alert" className="state state-error">
@@ -85,9 +87,11 @@ export function GraphDetail({
   const statusBySlug = new Map(data.nodes.map((n) => [n.slug, n.status]))
 
   // A graph click on a GbuildNode opens the node panel as before; any other
-  // label opens the generic element panel.
+  // label opens the generic element panel. A relationship click opens the
+  // element panel on that rel.
   const onExplorerNodeClick = (id: string) => {
     const element = storeData?.nodes.find((n) => n.id === id)
+    setSelectedRel(null)
     if (element?.labels.includes("GbuildNode")) {
       setSelectedSlug(String(element.properties.slug))
       setSelectedElement(null)
@@ -96,6 +100,20 @@ export function GraphDetail({
       setSelectedSlug(null)
     }
   }
+
+  const onExplorerRelClick = (id: string) => {
+    setSelectedRel(storeData?.rels.find((r) => r.id === id) ?? null)
+    setSelectedSlug(null)
+    setSelectedElement(null)
+  }
+
+  // The selected GbuildNode's store-graph id comes from the fetched graph —
+  // the id scheme is the server's, never reconstructed client-side.
+  const selectedNodeId =
+    selectedSlug === null
+      ? null
+      : (storeData?.nodes.find((n) => n.labels.includes("GbuildNode") && n.properties.slug === selectedSlug)?.id ??
+        null)
 
   const waves = new Map<number, GraphNode[]>()
   for (const node of data.nodes) {
@@ -139,8 +157,9 @@ export function GraphDetail({
             <StoreGraphExplorer
               graph={storeData}
               statusBySlug={statusBySlug}
-              selectedId={selectedSlug ? `GbuildNode:${selectedSlug}` : (selectedElement?.id ?? null)}
+              selectedId={selectedNodeId ?? selectedElement?.id ?? selectedRel?.id ?? null}
               onNodeClick={onExplorerNodeClick}
+              onRelClick={onExplorerRelClick}
               onCanvasDoubleClick={clearSelection}
               nvlRef={nvlRef}
             />
@@ -153,7 +172,12 @@ export function GraphDetail({
               onClose={() => setSelectedSlug(null)}
             />
           )}
-          {selectedElement && <ElementPanel node={selectedElement} onClose={() => setSelectedElement(null)} />}
+          {selectedElement && storeData && (
+            <ElementPanel element={selectedElement} graph={storeData} onClose={() => setSelectedElement(null)} />
+          )}
+          {selectedRel && storeData && (
+            <ElementPanel element={selectedRel} graph={storeData} onClose={() => setSelectedRel(null)} />
+          )}
           {[...waves.entries()]
             .sort(([a], [b]) => a - b)
             .map(([wave, nodes]) => (
@@ -167,6 +191,7 @@ export function GraphDetail({
                         onClick={() => {
                           setSelectedSlug(node.slug)
                           setSelectedElement(null)
+                          setSelectedRel(null)
                         }}
                       >
                         <span className="mono">{node.slug}</span> <StatusChip status={node.status} />
