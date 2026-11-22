@@ -87,6 +87,7 @@ const { GraphDetail } = await import("../ui/GraphDetail.tsx")
 const { AttentionView } = await import("../ui/AttentionView.tsx")
 const { KnowledgeView } = await import("../ui/KnowledgeView.tsx")
 const { toNvlGraph, NvlGraph } = await import("../ui/NvlGraph.tsx")
+const { TimelineTab } = await import("../ui/TimelineTab.tsx")
 const { App } = await import("../ui/App.tsx")
 const { StatusChip } = await import("../ui/StatusChip.tsx")
 
@@ -117,10 +118,17 @@ const GRAPH = {
       reviews: [
         {
           attempt: 1,
+          verdict: "fail",
+          failed_criteria: ["alpha implemented"],
+          checklist: ["build red", "alpha implemented — FAIL"],
+          at: "2026-01-01T00:11:00Z",
+        },
+        {
+          attempt: 2,
           verdict: "pass",
           failed_criteria: [],
           checklist: ["build green"],
-          at: "2026-01-01T00:11:00Z",
+          at: "2026-01-01T00:12:00Z",
         },
       ],
     },
@@ -140,6 +148,10 @@ const GRAPH = {
       outputs: [{ name: "result", shape: "<integer>", from: null, value: null }],
       reviews: [],
     },
+  ],
+  acceptance: [
+    { id: "a1", text: "alpha works end to end", covered_by: ["a-impl", "b-use"] },
+    { id: "a2", text: "no regressions", covered_by: [] },
   ],
 }
 
@@ -533,6 +545,97 @@ describe("monitor ui", () => {
       [{ id: "b-use->a-impl", from: "b-use", to: "a-impl" }],
     )
     assert.ok(container.querySelector("canvas"), "canvas renderer draws into the container")
+    await unmount()
+  })
+
+  test("feature tabs: hash-addressable timeline, acceptance and repairs views of one feature", async () => {
+    const { container, unmount } = await render(<App pollInterval={60_000} />)
+    const goto = async (hash: string) => {
+      window.location.hash = hash
+      await act(async () => {
+        window.dispatchEvent(new dom.window.Event("hashchange"))
+      })
+    }
+    const currentTab = () => container.querySelector(".tab-bar a[aria-current='page']")?.textContent
+
+    // The graph tab is the default; the tab bar links to all four tabs.
+    await goto("#/features/alpha")
+    const tabBar = container.querySelector(".tab-bar")
+    assert.ok(tabBar, "feature detail renders a tab bar")
+    for (const href of [
+      "#/features/alpha",
+      "#/features/alpha/timeline",
+      "#/features/alpha/acceptance",
+      "#/features/alpha/repairs",
+    ]) {
+      assert.ok(tabBar.querySelector(`a[href='${href}']`), `tab bar links to ${href}`)
+    }
+    assert.equal(currentTab(), "Graph", "graph is the current tab by default")
+    assert.ok(container.querySelector("#NVL_interactive-wrapper"), "graph tab mounts the NVL wrapper")
+
+    // Timeline tab: per-node bars from started_at/completed_at.
+    await goto("#/features/alpha/timeline")
+    assert.equal(currentTab(), "Timeline")
+    const timelineText = container.textContent ?? ""
+    for (const expected of ["a-impl", "3m 5s", "not started", "b-use"]) {
+      assert.ok(timelineText.includes(expected), `timeline tab should contain ${JSON.stringify(expected)}`)
+    }
+    assert.ok(container.querySelector(".timeline-bar[data-status='completed']"), "timeline bar carries the status")
+    assert.ok(!container.querySelector("#NVL_interactive-wrapper"), "timeline tab does not mount the graph")
+
+    // Acceptance tab: each feature criterion with its covering nodes as status chips.
+    await goto("#/features/alpha/acceptance")
+    assert.equal(currentTab(), "Acceptance")
+    const acceptanceText = container.textContent ?? ""
+    for (const expected of ["alpha works end to end", "no regressions", "uncovered", "a-impl", "b-use"]) {
+      assert.ok(acceptanceText.includes(expected), `acceptance tab should contain ${JSON.stringify(expected)}`)
+    }
+    const list = container.querySelector(".acceptance-list")
+    assert.ok(list?.querySelector(".status-chip[data-status='completed']"), "covered-by chip carries the node status")
+    assert.ok(list?.querySelector(".status-chip[data-status='frontier']"), "frontier covering node gets its chip color")
+
+    // Repairs tab: per-node review attempts with failed criteria and checklist lines.
+    await goto("#/features/alpha/repairs")
+    assert.equal(currentTab(), "Repairs")
+    const repairsText = container.textContent ?? ""
+    for (const expected of [
+      "a-impl",
+      "attempt 1",
+      "fail",
+      "alpha implemented",
+      "build red",
+      "attempt 2",
+      "pass",
+      "build green",
+    ]) {
+      assert.ok(repairsText.includes(expected), `repairs tab should contain ${JSON.stringify(expected)}`)
+    }
+    await unmount()
+    window.location.hash = ""
+  })
+
+  test("timeline tab positions bars on a shared time axis with durations and idle gaps visible", async () => {
+    const nodes = [
+      { slug: "a-first", status: "completed", started_at: "2026-01-01T00:00:00Z", completed_at: "2026-01-01T00:10:00Z" },
+      { slug: "b-second", status: "completed", started_at: "2026-01-01T00:20:00Z", completed_at: "2026-01-01T00:30:00Z" },
+      { slug: "c-waiting", status: "frontier", started_at: null, completed_at: null },
+    ] as any
+    const { container, unmount } = await render(<TimelineTab nodes={nodes} />)
+    const bars = [...container.querySelectorAll(".timeline-bar")] as HTMLElement[]
+    assert.equal(bars.length, 2, "one bar per started node")
+    const firstEnd = parseFloat(bars[0]!.style.left) + parseFloat(bars[0]!.style.width)
+    assert.equal(parseFloat(bars[0]!.style.left), 0, "first bar starts at the axis origin")
+    assert.ok(
+      parseFloat(bars[1]!.style.left) - firstEnd > 30,
+      "the idle gap between the two runs is visible on the shared axis",
+    )
+    const text = container.textContent ?? ""
+    assert.ok(text.includes("10m 0s"), "bars show run durations")
+    assert.ok(
+      text.includes("2026-01-01T00:00:00.000Z") && text.includes("2026-01-01T00:30:00.000Z"),
+      "axis shows the time range",
+    )
+    assert.ok(text.includes("not started") && text.includes("c-waiting"), "unstarted nodes are listed")
     await unmount()
   })
 })

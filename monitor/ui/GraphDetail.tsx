@@ -1,16 +1,33 @@
-// Graph detail view: the NVL dependency graph as the primary surface, a node
-// detail side panel (opened from the graph or the compact wave list, closed by
-// Esc or canvas double-click), and the wave-grouped node summary list. Polls
+// Feature detail view with hash-addressable tabs: Graph (the NVL dependency
+// graph as the primary surface, a node detail side panel opened from the graph
+// or the compact wave list, and the wave-grouped node summary list), Timeline
+// (per-node run bars on a shared time axis), Acceptance (feature criteria with
+// their covering nodes) and Repairs (per-node review attempt history). Polls
 // /api/features/:slug/graph and /api/knowledge.
 import { useEffect, useState } from "react"
 import type { GraphNode } from "../src/graph.ts"
+import { AcceptanceTab } from "./AcceptanceTab.tsx"
 import { fetchGraph, fetchKnowledge } from "./api.ts"
 import { NodePanel } from "./NodePanel.tsx"
 import { NvlGraph } from "./NvlGraph.tsx"
+import { RepairsTab } from "./RepairsTab.tsx"
 import { StatusChip } from "./StatusChip.tsx"
+import { TimelineTab } from "./TimelineTab.tsx"
 import { usePoll } from "./usePoll.ts"
 
-export function GraphDetail({ slug, pollInterval }: { slug: string; pollInterval?: number }) {
+export type FeatureTab = "graph" | "timeline" | "acceptance" | "repairs"
+
+const TABS: { id: FeatureTab; label: string }[] = [
+  { id: "graph", label: "Graph" },
+  { id: "timeline", label: "Timeline" },
+  { id: "acceptance", label: "Acceptance" },
+  { id: "repairs", label: "Repairs" },
+]
+
+const tabHref = (slug: string, tab: FeatureTab) =>
+  `#/features/${encodeURIComponent(slug)}${tab === "graph" ? "" : `/${tab}`}`
+
+export function GraphDetail({ slug, tab = "graph", pollInterval }: { slug: string; tab?: FeatureTab; pollInterval?: number }) {
   const { data, error } = usePoll(() => fetchGraph(slug), pollInterval)
   const { data: knowledge } = usePoll(fetchKnowledge, pollInterval)
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
@@ -51,36 +68,53 @@ export function GraphDetail({ slug, pollInterval }: { slug: string; pollInterval
       <p>
         <a href="#/">← all features</a>
       </p>
-      <NvlGraph
-        nodes={data.nodes}
-        selectedSlug={selectedSlug}
-        onNodeClick={setSelectedSlug}
-        onCanvasDoubleClick={() => setSelectedSlug(null)}
-      />
-      {selected && (
-        <NodePanel
-          node={selected}
-          notes={(knowledge?.notes ?? []).filter(leftBySelected)}
-          symbols={(knowledge?.symbols ?? []).filter(leftBySelected)}
-          onClose={() => setSelectedSlug(null)}
-        />
-      )}
-      {[...waves.entries()]
-        .sort(([a], [b]) => a - b)
-        .map(([wave, nodes]) => (
-          <section key={wave}>
-            <h2>wave {wave}</h2>
-            <ul className="wave-list">
-              {nodes.map((node) => (
-                <li key={node.slug}>
-                  <button type="button" onClick={() => setSelectedSlug(node.slug)}>
-                    <span className="mono">{node.slug}</span> <StatusChip status={node.status} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
+      <nav className="tab-bar" aria-label="feature views">
+        {TABS.map((t) => (
+          <a key={t.id} href={tabHref(data.slug, t.id)} aria-current={tab === t.id ? "page" : undefined}>
+            {t.label}
+          </a>
         ))}
+      </nav>
+      {tab === "timeline" ? (
+        <TimelineTab nodes={data.nodes} />
+      ) : tab === "acceptance" ? (
+        <AcceptanceTab acceptance={data.acceptance} nodes={data.nodes} />
+      ) : tab === "repairs" ? (
+        <RepairsTab nodes={data.nodes} />
+      ) : (
+        <>
+          <NvlGraph
+            nodes={data.nodes}
+            selectedSlug={selectedSlug}
+            onNodeClick={setSelectedSlug}
+            onCanvasDoubleClick={() => setSelectedSlug(null)}
+          />
+          {selected && (
+            <NodePanel
+              node={selected}
+              notes={(knowledge?.notes ?? []).filter(leftBySelected)}
+              symbols={(knowledge?.symbols ?? []).filter(leftBySelected)}
+              onClose={() => setSelectedSlug(null)}
+            />
+          )}
+          {[...waves.entries()]
+            .sort(([a], [b]) => a - b)
+            .map(([wave, nodes]) => (
+              <section key={wave}>
+                <h2>wave {wave}</h2>
+                <ul className="wave-list">
+                  {nodes.map((node) => (
+                    <li key={node.slug}>
+                      <button type="button" onClick={() => setSelectedSlug(node.slug)}>
+                        <span className="mono">{node.slug}</span> <StatusChip status={node.status} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+        </>
+      )}
     </section>
   )
 }

@@ -48,10 +48,20 @@ Run from this directory:
   counts for every discovered store, topped by a needs-attention section
   listing the failed and blocked nodes across all stores (each links to its
   feature).
-- `#/features/<slug>` — graph detail: the dependency graph rendered with
-  [@neo4j-nvl/react](https://neo4j.com/docs/nvl/current/) (canvas renderer),
-  plus nodes grouped by wave with status, acceptance criteria, input/output
-  field values, and review verdicts.
+- `#/features/<slug>` — feature detail with hash-addressable tabs:
+  - **Graph** (default) — the dependency graph rendered with
+    [@neo4j-nvl/react](https://neo4j.com/docs/nvl/current/) (canvas renderer),
+    plus nodes grouped by wave; clicking a node or wave entry opens a side
+    panel with status, acceptance criteria, input/output field values, review
+    verdicts, and the node's notes and symbols.
+  - **Timeline** (`#/features/<slug>/timeline`) — each started node as a bar
+    on one shared time axis, colored by status, with run durations and the
+    idle gaps between nodes visible; unstarted nodes are listed below.
+  - **Acceptance** (`#/features/<slug>/acceptance`) — the feature's
+    acceptance criteria, each with its covering nodes as status chips;
+    uncovered criteria are flagged.
+  - **Repairs** (`#/features/<slug>/repairs`) — per-node review attempt
+    history: verdict, failed criteria and checklist lines per attempt.
 - `#/attention` — attention dashboard: every failed and blocked node across
   all stores with project, feature, state, the dependencies it waits on, and
   its last failed criteria.
