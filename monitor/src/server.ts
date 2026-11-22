@@ -1,6 +1,8 @@
 // The monitor REST API over node:http. Routes:
 //   GET /api/features                one summary per discovered store
 //   GET /api/features/:slug/graph    full node list of one store
+//   GET /api/attention               failed and blocked nodes across all stores
+//   GET /api/knowledge               notes and symbols across all stores
 // Any other GET serves the built UI from dist/ (npm run build) when present.
 import { createServer, type Server, type ServerResponse } from "node:http"
 import { readFile } from "node:fs/promises"
@@ -10,6 +12,8 @@ import { loadConfig, type MonitorConfig } from "./config.ts"
 import { discoverStores } from "./discover.ts"
 import { listFeatures } from "./features.ts"
 import { graphDetail } from "./graph.ts"
+import { listAttention } from "./attention.ts"
+import { listKnowledge } from "./knowledge.ts"
 
 const send = (res: ServerResponse, status: number, body: unknown) => {
   res.writeHead(status, { "content-type": "application/json" })
@@ -46,6 +50,8 @@ export async function startServer(configPath: string, options: { port?: number }
     try {
       const url = new URL(req.url ?? "/", "http://localhost")
       if (req.method === "GET" && url.pathname === "/api/features") return send(res, 200, await listFeatures(config))
+      if (req.method === "GET" && url.pathname === "/api/attention") return send(res, 200, await listAttention(config))
+      if (req.method === "GET" && url.pathname === "/api/knowledge") return send(res, 200, await listKnowledge(config))
       const match = url.pathname.match(/^\/api\/features\/([^/]+)\/graph$/)
       if (req.method === "GET" && match) {
         const slug = decodeURIComponent(match[1] as string)
