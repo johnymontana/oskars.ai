@@ -1,0 +1,25 @@
+{
+  "name": "gbuild-monitor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --import tsx index.ts",
+    "build": "vite build",
+    "dev": "vite",
+    "test": "node --import tsx --test test/*.test.ts test/*.test.tsx"
+  },
+  "dependencies": {
+    "@neo4j-nvl/base": "^2.1.0",
+    "@neo4j-nvl/react": "^2.1.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^30.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "jsdom": "^31.0.1",
+    "vite": "^8.3.8"
+  }
+}
