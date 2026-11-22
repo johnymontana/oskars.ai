@@ -13,7 +13,7 @@ import type { GraphNode } from "./api.ts"
 // The canvas renderer cannot resolve CSS custom properties, so colors are read
 // from the theme tokens at render time. The fallbacks mirror theme.css and are
 // only used where the stylesheet is not loaded (e.g. jsdom tests).
-const resolveToken = (name: string) =>
+export const resolveToken = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim()
 
 const FALLBACK_COLORS: Record<string, string> = {
