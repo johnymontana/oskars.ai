@@ -49,11 +49,22 @@ Run from this directory:
   listing the failed and blocked nodes across all stores (each links to its
   feature).
 - `#/features/<slug>` — feature detail with hash-addressable tabs:
-  - **Graph** (default) — the dependency graph rendered with
-    [@neo4j-nvl/react](https://neo4j.com/docs/nvl/current/) (canvas renderer),
-    plus nodes grouped by wave; clicking a node or wave entry opens a side
-    panel with status, acceptance criteria, input/output field values, review
-    verdicts, and the node's notes and symbols.
+  - **Graph** (default) — the whole store as an inspectable graph, rendered
+    with [@neo4j-nvl/react](https://neo4j.com/docs/nvl/current/) (canvas
+    renderer): the dependency skeleton (`GbuildNode` + `DEPENDS_ON`, status
+    colors, hierarchical by wave) is always on, and four layer toggles —
+    **contract** (`Field` nodes, `INPUT`/`OUTPUT`/`FROM`), **acceptance**
+    (`Acceptance`, `HAS_ACCEPTANCE`/`SATISFIES`), **reviews** (`Review`,
+    `REVIEWED`) and **knowledge** (`Note`/`Symbol`, `WROTE`/`DEFINES`) — add
+    their elements. A legend below the canvas lists every relationship type
+    present in the store with its color; the layout switches to force-directed
+    while any layer is on and back to hierarchical for skeleton-only. With the
+    contract layer on, `FROM` edges caption the recorded value flowing through
+    them. Clicking a graph element or wave entry opens a side panel: the full
+    node detail (status, acceptance criteria, input/output field values, review
+    verdicts, notes and symbols) for a `GbuildNode`, or a generic element panel
+    with the element's labels and properties for any other label. Nodes are
+    also grouped by wave below the graph.
   - **Timeline** (`#/features/<slug>/timeline`) — each started node as a bar
     on one shared time axis, colored by status, with run durations and the
     idle gaps between nodes visible; unstarted nodes are listed below.
@@ -62,12 +73,18 @@ Run from this directory:
     uncovered criteria are flagged.
   - **Repairs** (`#/features/<slug>/repairs`) — per-node review attempt
     history: verdict, failed criteria and checklist lines per attempt.
+  - **Query** (`#/features/<slug>/query`) — an ad-hoc read-only Cypher console
+    against the feature's store: returned rows render as a table, rows carrying
+    node/relationship values also render as an NVL graph, and a rejected
+    statement shows the server's error message.
 - `#/attention` — attention dashboard: every failed and blocked node across
   all stores with project, feature, state, the dependencies it waits on, and
   its last failed criteria.
-- `#/knowledge` — knowledge browser: implementer notes grouped by topic and
-  symbols (name, file, purpose, author) across all projects, filterable with
-  a text search box.
+- `#/knowledge` — knowledge browser, topped by the cross-store knowledge
+  graph: symbols merged by name+file across projects, connected to every
+  defining feature, and notes linked through shared topic hubs. Below it the
+  filterable lists of implementer notes grouped by topic and symbols (name,
+  file, purpose, author) across all projects.
 
 All views poll the API — default every 3000ms — and update in place. Override
 the interval with the `?poll=<ms>` query parameter, e.g.
@@ -85,6 +102,17 @@ the interval with the `?poll=<ms>` query parameter, e.g.
   `{ project, feature, node, state, waiting_on, last_failed_criteria }`.
 - `GET /api/knowledge` — notes and symbols across all stores, each with
   `project`, `feature` and `by_node`.
+- `POST /api/features/:slug/query` — read-only Cypher against one store:
+  request `{ cypher }`, response `{ rows }` with rows capped at 500; node/rel
+  values inside rows serialize the relate jsonl way (`{ id, kind, labels,
+  properties }` / `{ id, kind, type, start_node, end_node, properties }`).
+  `400` for an invalid body, invalid Cypher or a rejected write, `404` for an
+  unknown feature slug.
+- `GET /api/knowledge/graph` — the same knowledge as a cross-store graph:
+  `Symbol` nodes merged by name+file, individual `Note` nodes linked to
+  shared `Topic` hubs, one `Feature` node per store, and
+  `DEFINES`/`WROTE`/`ABOUT` rels carrying `project`, `feature` and `by_node`
+  provenance: `{ nodes: [{ id, labels, properties }], rels: [{ id, type, from, to, properties }] }`.
 
 ## Layout
 

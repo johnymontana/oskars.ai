@@ -1,6 +1,6 @@
 // Hash routing between the views: `#/` is the feature list,
-// `#/features/<slug>[/<tab>]` the feature detail (graph, timeline, acceptance
-// or repairs tab), `#/attention` the cross-store attention dashboard,
+// `#/features/<slug>[/<tab>]` the feature detail (graph, timeline, acceptance,
+// repairs or query tab), `#/attention` the cross-store attention dashboard,
 // `#/knowledge` the notes/symbols browser. No router dependency. The header
 // carries route navigation to the top-level routes.
 import { useEffect, useState } from "react"
@@ -17,7 +17,7 @@ type Route =
   | { view: "knowledge" }
 
 const parseRoute = (hash: string): Route => {
-  const match = hash.match(/^#\/features\/([^/]+?)(?:\/(timeline|acceptance|repairs))?$/)
+  const match = hash.match(/^#\/features\/([^/]+?)(?:\/(timeline|acceptance|repairs|query))?$/)
   if (match)
     return {
       view: "graph",

@@ -1,14 +1,48 @@
 // Knowledge view: the notes and symbols implementers left, across all
-// discovered stores. Notes group by topic; symbols list name, file, purpose
+// discovered stores. Topped by the cross-store knowledge graph (NVL, force-
+// directed): symbols merged by name+file across stores, edged to every
+// defining feature, and notes linked through shared topic hubs. Below it the
+// filterable lists: notes group by topic; symbols list name, file, purpose
 // and the node that left them. A text search box filters both lists.
-// Polls /api/knowledge.
+// Polls /api/knowledge and /api/knowledge/graph.
 import { useMemo, useState } from "react"
-import { fetchKnowledge } from "./api.ts"
+import type { Layout } from "@neo4j-nvl/base"
+import { fetchKnowledge, fetchKnowledgeGraph } from "./api.ts"
+import type { KnowledgeGraph, KnowledgeGraphNode } from "./api.ts"
+import { statusColor } from "./colors.ts"
+import { GraphFrame } from "./GraphFrame.tsx"
 import { usePoll } from "./usePoll.ts"
+
+// Node colors keyed by label, from the status palette (the one color
+// language): features are frontier blue, symbols completed green, notes
+// in-progress amber, topic hubs blocked gray; edges are dim.
+const LABEL_COLORS: Record<string, string> = {
+  Feature: statusColor("frontier"),
+  Symbol: statusColor("completed"),
+  Note: statusColor("in_progress"),
+  Topic: statusColor("blocked"),
+}
+
+const caption = (node: KnowledgeGraphNode): string => {
+  const props = node.properties as { name?: string; topic?: string; feature?: string; text?: string }
+  return props.name ?? props.topic ?? props.feature ?? (props.text ?? "").slice(0, 60)
+}
+
+export const toNvlKnowledgeGraph = (graph: KnowledgeGraph) => ({
+  nodes: graph.nodes.map((n) => ({
+    id: n.id,
+    caption: caption(n),
+    color: LABEL_COLORS[n.labels[0] ?? ""] ?? statusColor("blocked"),
+  })),
+  rels: graph.rels.map((r) => ({ id: r.id, from: r.from, to: r.to, color: statusColor("blocked") })),
+})
 
 export function KnowledgeView({ pollInterval }: { pollInterval?: number }) {
   const { data, error } = usePoll(fetchKnowledge, pollInterval)
+  const { data: graph } = usePoll(fetchKnowledgeGraph, pollInterval)
   const [filter, setFilter] = useState("")
+  const [layout, setLayout] = useState<Layout>("forceDirected")
+  const nvlGraph = useMemo(() => (graph ? toNvlKnowledgeGraph(graph) : null), [graph])
   const notesByTopic = useMemo(() => {
     const query = filter.trim().toLowerCase()
     const groups = new Map<string, NonNullable<typeof data>["notes"]>()
@@ -38,6 +72,15 @@ export function KnowledgeView({ pollInterval }: { pollInterval?: number }) {
   return (
     <section>
       <h1>knowledge</h1>
+      {nvlGraph && nvlGraph.nodes.length > 0 && (
+        <GraphFrame
+          nodes={nvlGraph.nodes}
+          rels={nvlGraph.rels}
+          layout={layout}
+          onLayoutChange={setLayout}
+          mouseEventCallbacks={{ onZoomAndPan: true }}
+        />
+      )}
       <p>
         <input
           type="search"

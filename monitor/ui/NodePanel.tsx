@@ -5,8 +5,7 @@
 import type { FieldValue, GraphNode } from "../src/graph.ts"
 import type { KnowledgeNote, KnowledgeSymbol } from "../src/knowledge.ts"
 import { StatusChip } from "./StatusChip.tsx"
-
-const formatValue = (value: unknown) => (value === null || value === undefined ? "—" : JSON.stringify(value))
+import { formatValue } from "./format.ts"
 
 // Human-readable run duration from the ISO timestamps, e.g. "3m 5s".
 export const formatDuration = (startedAt: string | null, completedAt: string | null) => {
