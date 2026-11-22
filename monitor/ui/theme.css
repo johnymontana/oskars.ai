@@ -21,6 +21,17 @@
   --status-failed: #e5534b; /* red */
   --status-cancelled: #5a6270; /* dimmed */
 
+  /* Relationship type color language — the store-graph explorer legend */
+  --rel-depends-on: #8b94a3; /* gray */
+  --rel-input: #5b9dff; /* blue */
+  --rel-output: #4caf7d; /* green */
+  --rel-from: #e2a336; /* amber, the dataflow emphasis */
+  --rel-has-acceptance: #ab7bd8; /* purple */
+  --rel-satisfies: #56c2d6; /* teal */
+  --rel-reviewed: #e5534b; /* red */
+  --rel-wrote: #d878b0; /* pink */
+  --rel-defines: #9dbb4f; /* olive */
+
   /* Typography */
   --font-sans:
     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
@@ -214,6 +225,54 @@ article h3 {
 .graph-toolbar button[aria-pressed="true"] {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+/* Store-graph explorer legend: layer toggles and one swatch per relationship
+   type present in the data, below the NVL canvas */
+.graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  padding: 0.4rem 0.6rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+  font-size: var(--text-xs);
+}
+.legend-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--text-dim);
+}
+.graph-legend button {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 0.15rem 0.55rem;
+  cursor: pointer;
+}
+.graph-legend button:hover {
+  border-color: var(--accent);
+}
+.graph-legend button[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-mono);
+}
+.legend-swatch {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.35rem;
+  border-radius: 2px;
 }
 
 /* Node detail side panel: fixed right, scrolls, overlays the page */

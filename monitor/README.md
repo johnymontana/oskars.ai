@@ -49,11 +49,22 @@ Run from this directory:
   listing the failed and blocked nodes across all stores (each links to its
   feature).
 - `#/features/<slug>` — feature detail with hash-addressable tabs:
-  - **Graph** (default) — the dependency graph rendered with
-    [@neo4j-nvl/react](https://neo4j.com/docs/nvl/current/) (canvas renderer),
-    plus nodes grouped by wave; clicking a node or wave entry opens a side
-    panel with status, acceptance criteria, input/output field values, review
-    verdicts, and the node's notes and symbols.
+  - **Graph** (default) — the whole store as an inspectable graph, rendered
+    with [@neo4j-nvl/react](https://neo4j.com/docs/nvl/current/) (canvas
+    renderer): the dependency skeleton (`GbuildNode` + `DEPENDS_ON`, status
+    colors, hierarchical by wave) is always on, and four layer toggles —
+    **contract** (`Field` nodes, `INPUT`/`OUTPUT`/`FROM`), **acceptance**
+    (`Acceptance`, `HAS_ACCEPTANCE`/`SATISFIES`), **reviews** (`Review`,
+    `REVIEWED`) and **knowledge** (`Note`/`Symbol`, `WROTE`/`DEFINES`) — add
+    their elements. A legend below the canvas lists every relationship type
+    present in the store with its color; the layout switches to force-directed
+    while any layer is on and back to hierarchical for skeleton-only. With the
+    contract layer on, `FROM` edges caption the recorded value flowing through
+    them. Clicking a graph element or wave entry opens a side panel: the full
+    node detail (status, acceptance criteria, input/output field values, review
+    verdicts, notes and symbols) for a `GbuildNode`, or a generic element panel
+    with the element's labels and properties for any other label. Nodes are
+    also grouped by wave below the graph.
   - **Timeline** (`#/features/<slug>/timeline`) — each started node as a bar
     on one shared time axis, colored by status, with run durations and the
     idle gaps between nodes visible; unstarted nodes are listed below.

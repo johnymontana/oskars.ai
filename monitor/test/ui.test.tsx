@@ -87,6 +87,7 @@ const { GraphDetail } = await import("../ui/GraphDetail.tsx")
 const { AttentionView } = await import("../ui/AttentionView.tsx")
 const { KnowledgeView, toNvlKnowledgeGraph } = await import("../ui/KnowledgeView.tsx")
 const { toNvlGraph, NvlGraph } = await import("../ui/NvlGraph.tsx")
+const { StoreGraphExplorer, FALLBACK_REL_COLORS } = await import("../ui/StoreGraphExplorer.tsx")
 const { TimelineTab } = await import("../ui/TimelineTab.tsx")
 const { App } = await import("../ui/App.tsx")
 const { StatusChip } = await import("../ui/StatusChip.tsx")
@@ -271,6 +272,69 @@ const KNOWLEDGE_GRAPH = {
   ],
 }
 
+// The raw store elements of feature alpha, matching GRAPH above: every label
+// and relationship type the store schema uses.
+const STORE_GRAPH = {
+  nodes: [
+    { id: "Acceptance:a1", labels: ["Acceptance"], properties: { id: "a1", text: "alpha works end to end" } },
+    { id: "Acceptance:a2", labels: ["Acceptance"], properties: { id: "a2", text: "no regressions" } },
+    { id: "Feature:alpha", labels: ["Feature"], properties: { feature: "alpha", destination: "Alpha feature done." } },
+    { id: "Field:a-impl:output:value", labels: ["Field"], properties: { name: "value", shape: "<integer>", value: 21 } },
+    { id: "Field:b-use:input:value", labels: ["Field"], properties: { name: "value", shape: "<integer>" } },
+    { id: "Field:b-use:output:result", labels: ["Field"], properties: { name: "result", shape: "<integer>" } },
+    {
+      id: "GbuildNode:a-impl",
+      labels: ["GbuildNode", "Code"],
+      properties: { slug: "a-impl", title: "Implement alpha", type: "code", status: "completed" },
+    },
+    {
+      id: "GbuildNode:b-use",
+      labels: ["GbuildNode", "Code"],
+      properties: { slug: "b-use", title: "Use alpha value", type: "code", status: "pending" },
+    },
+    {
+      id: "Note:a-impl:testing:layout settles asynchronously in jsdom",
+      labels: ["Note"],
+      properties: { topic: "testing", text: "layout settles asynchronously in jsdom", by_node: "a-impl" },
+    },
+    {
+      id: "Review:a-impl:1",
+      labels: ["Review"],
+      properties: { attempt: 1, verdict: "fail", failed_criteria: ["alpha implemented"], checklist: ["build red"], at: "2026-01-01T00:11:00Z" },
+    },
+    {
+      id: "Review:a-impl:2",
+      labels: ["Review"],
+      properties: { attempt: 2, verdict: "pass", failed_criteria: [], checklist: ["build green"], at: "2026-01-01T00:12:00Z" },
+    },
+    {
+      id: "Symbol:a-impl:toNvlGraph",
+      labels: ["Symbol"],
+      properties: { name: "toNvlGraph", file: "monitor/ui/NvlGraph.tsx", purpose: "maps graph nodes to NVL nodes/rels", by_node: "a-impl" },
+    },
+  ],
+  rels: [
+    { id: "DEFINES:GbuildNode:a-impl->Symbol:a-impl:toNvlGraph", type: "DEFINES", from: "GbuildNode:a-impl", to: "Symbol:a-impl:toNvlGraph", properties: {} },
+    { id: "DEPENDS_ON:GbuildNode:b-use->GbuildNode:a-impl", type: "DEPENDS_ON", from: "GbuildNode:b-use", to: "GbuildNode:a-impl", properties: {} },
+    { id: "FROM:Field:b-use:input:value->Field:a-impl:output:value", type: "FROM", from: "Field:b-use:input:value", to: "Field:a-impl:output:value", properties: {} },
+    { id: "HAS_ACCEPTANCE:Feature:alpha->Acceptance:a1", type: "HAS_ACCEPTANCE", from: "Feature:alpha", to: "Acceptance:a1", properties: {} },
+    { id: "HAS_ACCEPTANCE:Feature:alpha->Acceptance:a2", type: "HAS_ACCEPTANCE", from: "Feature:alpha", to: "Acceptance:a2", properties: {} },
+    { id: "INPUT:GbuildNode:b-use->Field:b-use:input:value", type: "INPUT", from: "GbuildNode:b-use", to: "Field:b-use:input:value", properties: {} },
+    { id: "OUTPUT:GbuildNode:a-impl->Field:a-impl:output:value", type: "OUTPUT", from: "GbuildNode:a-impl", to: "Field:a-impl:output:value", properties: {} },
+    { id: "OUTPUT:GbuildNode:b-use->Field:b-use:output:result", type: "OUTPUT", from: "GbuildNode:b-use", to: "Field:b-use:output:result", properties: {} },
+    { id: "REVIEWED:GbuildNode:a-impl->Review:a-impl:1", type: "REVIEWED", from: "GbuildNode:a-impl", to: "Review:a-impl:1", properties: {} },
+    { id: "REVIEWED:GbuildNode:a-impl->Review:a-impl:2", type: "REVIEWED", from: "GbuildNode:a-impl", to: "Review:a-impl:2", properties: {} },
+    { id: "SATISFIES:GbuildNode:a-impl->Acceptance:a1", type: "SATISFIES", from: "GbuildNode:a-impl", to: "Acceptance:a1", properties: {} },
+    { id: "SATISFIES:GbuildNode:b-use->Acceptance:a1", type: "SATISFIES", from: "GbuildNode:b-use", to: "Acceptance:a1", properties: {} },
+    { id: "WROTE:GbuildNode:a-impl->Note:a-impl:testing:layout settles asynchronously in jsdom", type: "WROTE", from: "GbuildNode:a-impl", to: "Note:a-impl:testing:layout settles asynchronously in jsdom", properties: {} },
+  ],
+}
+
+const STATUS_BY_SLUG = new Map([
+  ["a-impl", "completed"],
+  ["b-use", "frontier"],
+])
+
 let fetchCalls: string[] = []
 globalThis.fetch = (async (input: any, init?: any) => {
   const path = String(input)
@@ -284,6 +348,7 @@ globalThis.fetch = (async (input: any, init?: any) => {
     if (String(cypher).includes("MATCH")) return Response.json({ rows: QUERY_GRAPH_ROWS })
     return Response.json({ rows: QUERY_SCALAR_ROWS })
   }
+  if (path === "/api/features/alpha/store-graph") return Response.json(STORE_GRAPH)
   if (path === "/api/attention") return Response.json(ATTENTION)
   if (path === "/api/knowledge") return Response.json(KNOWLEDGE)
   if (path === "/api/knowledge/graph") return Response.json(KNOWLEDGE_GRAPH)
@@ -837,6 +902,179 @@ describe("monitor ui", () => {
       "axis shows the time range",
     )
     assert.ok(text.includes("not started") && text.includes("c-waiting"), "unstarted nodes are listed")
+    await unmount()
+  })
+
+  test("store explorer: skeleton-only renders the GbuildNode set; layer toggles add their node kinds and rels", async () => {
+    const ref = React.createRef<any>()
+    const { container, unmount } = await render(
+      <StoreGraphExplorer graph={STORE_GRAPH as any} statusBySlug={STATUS_BY_SLUG} nvlRef={ref} />,
+    )
+    const nodeIds = () => (ref.current.getNodes() as any[]).map((n) => n.id).sort()
+    const relTypes = () => [...new Set((ref.current.getRelationships() as any[]).map((r) => r.type))].sort()
+    const layerButton = (layer: string) => {
+      const button = [...container.querySelectorAll(".graph-legend button")].find((b) => b.textContent === layer)
+      assert.ok(button, `layer toggle for ${layer} is present`)
+      return button
+    }
+    const toggle = async (layer: string) => {
+      await act(async () => {
+        layerButton(layer).dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      })
+    }
+
+    // Skeleton only: exactly the GbuildNode set and DEPENDS_ON.
+    assert.deepEqual(nodeIds(), ["GbuildNode:a-impl", "GbuildNode:b-use"], "skeleton renders only GbuildNode elements")
+    assert.deepEqual(relTypes(), ["DEPENDS_ON"], "skeleton renders only DEPENDS_ON rels")
+    assert.equal(ref.current.getNodeById("GbuildNode:a-impl").caption, "a-impl", "GbuildNode caption is the slug")
+    assert.equal(ref.current.getNodeById("GbuildNode:a-impl").color, "#4caf7d", "skeleton keeps status colors")
+
+    // Contract layer: Field nodes and INPUT/OUTPUT/FROM rels.
+    await toggle("contract")
+    assert.ok(
+      ["Field:a-impl:output:value", "Field:b-use:input:value", "Field:b-use:output:result"].every((id) =>
+        nodeIds().includes(id),
+      ),
+      "contract layer renders the Field nodes",
+    )
+    assert.deepEqual(relTypes(), ["DEPENDS_ON", "FROM", "INPUT", "OUTPUT"], "contract layer adds INPUT/OUTPUT/FROM")
+    assert.equal(
+      ref.current.getNodeById("Field:a-impl:output:value").caption,
+      "value: 21",
+      "Field caption shows name: value",
+    )
+    await toggle("contract")
+
+    // Acceptance layer: Acceptance nodes (plus the Feature endpoint) and
+    // HAS_ACCEPTANCE/SATISFIES rels.
+    await toggle("acceptance")
+    assert.ok(nodeIds().includes("Acceptance:a1") && nodeIds().includes("Acceptance:a2"), "acceptance layer renders Acceptance nodes")
+    assert.ok(nodeIds().includes("Feature:alpha"), "acceptance layer renders the Feature endpoint of HAS_ACCEPTANCE")
+    assert.deepEqual(relTypes(), ["DEPENDS_ON", "HAS_ACCEPTANCE", "SATISFIES"], "acceptance layer adds HAS_ACCEPTANCE/SATISFIES")
+    await toggle("acceptance")
+
+    // Reviews layer: Review nodes and REVIEWED rels.
+    await toggle("reviews")
+    assert.ok(nodeIds().includes("Review:a-impl:1") && nodeIds().includes("Review:a-impl:2"), "reviews layer renders Review nodes")
+    assert.deepEqual(relTypes(), ["DEPENDS_ON", "REVIEWED"], "reviews layer adds REVIEWED")
+    await toggle("reviews")
+
+    // Knowledge layer: Note and Symbol nodes with WROTE/DEFINES rels.
+    await toggle("knowledge")
+    assert.ok(
+      nodeIds().includes("Note:a-impl:testing:layout settles asynchronously in jsdom"),
+      "knowledge layer renders Note nodes",
+    )
+    assert.ok(nodeIds().includes("Symbol:a-impl:toNvlGraph"), "knowledge layer renders Symbol nodes")
+    assert.deepEqual(relTypes(), ["DEFINES", "DEPENDS_ON", "WROTE"], "knowledge layer adds WROTE/DEFINES")
+    await toggle("knowledge")
+
+    // All layers off again: back to exactly the skeleton.
+    assert.deepEqual(nodeIds(), ["GbuildNode:a-impl", "GbuildNode:b-use"], "untoggling restores the skeleton")
+    await unmount()
+  })
+
+  test("store explorer legend lists every relationship type present in the data with its color", async () => {
+    const { container, unmount } = await render(
+      <StoreGraphExplorer graph={STORE_GRAPH as any} statusBySlug={STATUS_BY_SLUG} />,
+    )
+    const legend = container.querySelector(".graph-legend")
+    assert.ok(legend, "the explorer renders a legend")
+    for (const [type, color] of Object.entries(FALLBACK_REL_COLORS)) {
+      assert.ok((legend.textContent ?? "").includes(type), `legend lists ${type}`)
+      const swatch: Element | null = legend.querySelector(`.legend-swatch[data-color='${color}']`)
+      assert.ok(swatch, `legend shows ${type} with its color ${color}`)
+      // jsdom serializes the inline backgroundColor to rgb(); data-color keeps the hex.
+      assert.ok(
+        ((swatch as HTMLElement).style.backgroundColor ?? "").length > 0,
+        `swatch for ${type} carries the color as its background`,
+      )
+    }
+    await unmount()
+  })
+
+  test("store explorer layout: any non-skeleton layer switches to force-directed, skeleton-only restores hierarchical", async () => {
+    const { container, unmount } = await render(
+      <StoreGraphExplorer graph={STORE_GRAPH as any} statusBySlug={STATUS_BY_SLUG} />,
+    )
+    const layoutToggle = [...container.querySelectorAll(".graph-toolbar button")].find((b) =>
+      b.textContent?.includes("layout:"),
+    )
+    assert.ok(layoutToggle, "layout toggle is present")
+    assert.ok(layoutToggle.textContent?.includes("hierarchical"), "skeleton-only starts hierarchical")
+    const layer = [...container.querySelectorAll(".graph-legend button")].find((b) => b.textContent === "reviews")
+    assert.ok(layer, "reviews layer toggle is present")
+
+    await act(async () => {
+      layer.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    assert.ok(layoutToggle.textContent?.includes("force-directed"), "a non-skeleton layer switches to force-directed")
+    assert.equal(layoutToggle.getAttribute("aria-pressed"), "true")
+
+    // The manual layout toggle still works while a layer is on.
+    await act(async () => {
+      layoutToggle.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    assert.ok(layoutToggle.textContent?.includes("hierarchical"), "manual toggle pins hierarchical with a layer on")
+
+    await act(async () => {
+      layer.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    assert.ok(layoutToggle.textContent?.includes("hierarchical"), "skeleton-only restores hierarchical")
+    assert.equal(layoutToggle.getAttribute("aria-pressed"), "false")
+    await unmount()
+  })
+
+  test("store explorer element panel: clicking a Field node shows its labels and properties; FROM captions the recorded value", async () => {
+    const ref = React.createRef<any>()
+    const { container, unmount } = await render(<GraphDetail slug="alpha" pollInterval={60_000} nvlRef={ref} />)
+
+    // Contract layer on: the FROM rel captions the recorded value flowing through it.
+    const contractLayer = [...container.querySelectorAll(".graph-legend button")].find((b) => b.textContent === "contract")
+    assert.ok(contractLayer, "contract layer toggle is present")
+    await act(async () => {
+      contractLayer.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    const fromRel = (ref.current.getRelationships() as any[]).find(
+      (r) => r.id === "FROM:Field:b-use:input:value->Field:a-impl:output:value",
+    )
+    assert.ok(fromRel, "contract layer renders the FROM rel")
+    assert.ok(String(fromRel.caption).includes("21"), "FROM rel caption contains the recorded value")
+
+    // Pin hierarchical layout so positions settle synchronously in jsdom.
+    const layoutToggle = [...container.querySelectorAll(".graph-toolbar button")].find((b) =>
+      b.textContent?.includes("layout:"),
+    )
+    await act(async () => {
+      layoutToggle!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
+
+    // Clicking a Field node opens the element panel with its labels and properties.
+    const wrapper = container.querySelector("#NVL_interactive-wrapper") as Element
+    const field = (ref.current.getNodes() as any[]).find((n) => n.id === "Field:a-impl:output:value")
+    assert.ok(field, "contract layer renders the output Field node")
+    const { x, y } = field.clientPosition as { x: number; y: number }
+    await act(async () => {
+      wrapper.dispatchEvent(new MouseEvent("mousedown", { clientX: x, clientY: y, button: 0, bubbles: true }))
+      wrapper.dispatchEvent(new MouseEvent("click", { clientX: x, clientY: y, button: 0, bubbles: true }))
+    })
+    const panel = container.querySelector(".element-panel")
+    assert.ok(panel, "clicking a Field node opens the element panel")
+    assert.equal(panel.getAttribute("aria-label"), "element Field:a-impl:output:value")
+    const panelText = panel.textContent ?? ""
+    for (const expected of ["Field", "Field:a-impl:output:value", "name", "value", "21", "shape", "<integer>"]) {
+      assert.ok(panelText.includes(expected), `element panel should contain ${JSON.stringify(expected)}`)
+    }
+    assert.ok(!container.querySelector(".node-panel:not(.element-panel)"), "a Field click does not open the node panel")
+
+    // Esc closes the element panel.
+    await act(async () => {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))
+    })
+    assert.ok(!container.querySelector(".element-panel"), "Esc closes the element panel")
     await unmount()
   })
 })
