@@ -62,6 +62,10 @@ Run from this directory:
     uncovered criteria are flagged.
   - **Repairs** (`#/features/<slug>/repairs`) — per-node review attempt
     history: verdict, failed criteria and checklist lines per attempt.
+  - **Query** (`#/features/<slug>/query`) — an ad-hoc read-only Cypher console
+    against the feature's store: returned rows render as a table, rows carrying
+    node/relationship values also render as an NVL graph, and a rejected
+    statement shows the server's error message.
 - `#/attention` — attention dashboard: every failed and blocked node across
   all stores with project, feature, state, the dependencies it waits on, and
   its last failed criteria.
@@ -85,6 +89,12 @@ the interval with the `?poll=<ms>` query parameter, e.g.
   `{ project, feature, node, state, waiting_on, last_failed_criteria }`.
 - `GET /api/knowledge` — notes and symbols across all stores, each with
   `project`, `feature` and `by_node`.
+- `POST /api/features/:slug/query` — read-only Cypher against one store:
+  request `{ cypher }`, response `{ rows }` with rows capped at 500; node/rel
+  values inside rows serialize the relate jsonl way (`{ id, kind, labels,
+  properties }` / `{ id, kind, type, start_node, end_node, properties }`).
+  `400` for an invalid body, invalid Cypher or a rejected write, `404` for an
+  unknown feature slug.
 
 ## Layout
 

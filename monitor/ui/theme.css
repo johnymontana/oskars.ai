@@ -399,6 +399,33 @@ article h3 {
   font-size: var(--text-xs);
 }
 
+/* Query tab: ad-hoc Cypher console — editor, run button, results table */
+.query-console textarea {
+  display: block;
+  width: 100%;
+  background: var(--bg-inset);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  font-size: var(--text-sm);
+  resize: vertical;
+}
+.query-console button[type="submit"] {
+  margin: 0.5rem 0;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 0.3rem 0.9rem;
+  cursor: pointer;
+}
+.query-console button[type="submit"]:hover {
+  border-color: var(--accent);
+}
+
 /* Empty, loading and error states */
 .state {
   padding: 1.5rem 1rem;

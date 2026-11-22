@@ -20,3 +20,19 @@ export const fetchGraph = (slug: string) => get<GraphDetail>(`/api/features/${en
 
 export const fetchAttention = () => get<AttentionItem[]>("/api/attention")
 export const fetchKnowledge = () => get<Knowledge>("/api/knowledge")
+
+export type QueryRow = Record<string, unknown>
+
+// Read-only ad-hoc Cypher against one feature's store. Errors (invalid body,
+// invalid Cypher, a rejected write, an unknown feature) surface the server's
+// message so the UI can show it verbatim.
+export const postQuery = async (slug: string, cypher: string): Promise<{ rows: QueryRow[] }> => {
+  const res = await fetch(`/api/features/${encodeURIComponent(slug)}/query`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ cypher }),
+  })
+  const body = (await res.json()) as { rows?: QueryRow[]; error?: string }
+  if (!res.ok) throw new Error(body.error ?? `POST query failed: ${res.status}`)
+  return { rows: body.rows ?? [] }
+}

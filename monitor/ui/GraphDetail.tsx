@@ -2,7 +2,8 @@
 // graph as the primary surface, a node detail side panel opened from the graph
 // or the compact wave list, and the wave-grouped node summary list), Timeline
 // (per-node run bars on a shared time axis), Acceptance (feature criteria with
-// their covering nodes) and Repairs (per-node review attempt history). Polls
+// their covering nodes), Repairs (per-node review attempt history) and Query
+// (ad-hoc read-only Cypher console). Polls
 // /api/features/:slug/graph and /api/knowledge.
 import { useEffect, useState } from "react"
 import type { GraphNode } from "../src/graph.ts"
@@ -10,18 +11,20 @@ import { AcceptanceTab } from "./AcceptanceTab.tsx"
 import { fetchGraph, fetchKnowledge } from "./api.ts"
 import { NodePanel } from "./NodePanel.tsx"
 import { NvlGraph } from "./NvlGraph.tsx"
+import { QueryTab } from "./QueryTab.tsx"
 import { RepairsTab } from "./RepairsTab.tsx"
 import { StatusChip } from "./StatusChip.tsx"
 import { TimelineTab } from "./TimelineTab.tsx"
 import { usePoll } from "./usePoll.ts"
 
-export type FeatureTab = "graph" | "timeline" | "acceptance" | "repairs"
+export type FeatureTab = "graph" | "timeline" | "acceptance" | "repairs" | "query"
 
 const TABS: { id: FeatureTab; label: string }[] = [
   { id: "graph", label: "Graph" },
   { id: "timeline", label: "Timeline" },
   { id: "acceptance", label: "Acceptance" },
   { id: "repairs", label: "Repairs" },
+  { id: "query", label: "Query" },
 ]
 
 const tabHref = (slug: string, tab: FeatureTab) =>
@@ -81,6 +84,8 @@ export function GraphDetail({ slug, tab = "graph", pollInterval }: { slug: strin
         <AcceptanceTab acceptance={data.acceptance} nodes={data.nodes} />
       ) : tab === "repairs" ? (
         <RepairsTab nodes={data.nodes} />
+      ) : tab === "query" ? (
+        <QueryTab slug={data.slug} />
       ) : (
         <>
           <NvlGraph
