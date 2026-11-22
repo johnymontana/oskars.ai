@@ -1,0 +1,419 @@
+/* gbuild monitor theme: hand-rolled dark palette, six-state status color
+   language, typography scale, and app chrome. Every color is a CSS custom
+   property so graph nodes, status chips, and timeline bars can share one
+   language. No framework, no dependencies. */
+
+:root {
+  /* Dark palette */
+  --bg: #0d1117; /* app background */
+  --bg-raised: #161b22; /* cards, panels, header */
+  --bg-inset: #0a0e14; /* wells inside raised surfaces */
+  --border: #2d333f; /* hairlines and card outlines */
+  --text: #e6e9ef; /* primary text */
+  --text-dim: #8b94a3; /* secondary text, captions */
+  --accent: #6aa3ff; /* links and interactive affordances */
+
+  /* Status color language — the one set used everywhere */
+  --status-completed: #4caf7d; /* green */
+  --status-in-progress: #e2a336; /* amber */
+  --status-frontier: #5b9dff; /* blue */
+  --status-blocked: #8b94a3; /* gray */
+  --status-failed: #e5534b; /* red */
+  --status-cancelled: #5a6270; /* dimmed */
+
+  /* Typography */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.5rem;
+  --text-2xl: 2rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+
+h1 {
+  font-size: var(--text-2xl);
+}
+h2 {
+  font-size: var(--text-xl);
+}
+h3 {
+  font-size: var(--text-lg);
+}
+h4 {
+  font-size: var(--text-md);
+}
+h1,
+h2,
+h3,
+h4 {
+  line-height: 1.25;
+  margin: 0.75em 0 0.4em;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+code,
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.text-dim {
+  color: var(--text-dim);
+}
+
+/* Text filter inputs (knowledge browser) */
+input[type="search"] {
+  background: var(--bg-inset);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  width: 24rem;
+  max-width: 100%;
+}
+
+/* App chrome: header with route navigation */
+.app-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+  padding: 0.6rem 1.25rem;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+.app-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+.app-nav {
+  display: flex;
+  gap: 1rem;
+  font-size: var(--text-sm);
+}
+
+.app-main {
+  padding: 1rem 1.25rem;
+  max-width: 1100px;
+}
+
+/* Tables of features / fields */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--text-sm);
+}
+th,
+td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+th {
+  color: var(--text-dim);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Node cards */
+article {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+}
+article h3 {
+  margin-top: 0;
+}
+
+/* Status chips — the status color language as text + border */
+.status-chip {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  margin: 0.1rem 0.25rem 0.1rem 0;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.status-chip[data-status="completed"] {
+  color: var(--status-completed);
+}
+.status-chip[data-status="in_progress"] {
+  color: var(--status-in-progress);
+}
+.status-chip[data-status="frontier"] {
+  color: var(--status-frontier);
+}
+.status-chip[data-status="blocked"] {
+  color: var(--status-blocked);
+}
+.status-chip[data-status="failed"] {
+  color: var(--status-failed);
+}
+.status-chip[data-status="cancelled"] {
+  color: var(--status-cancelled);
+}
+
+/* Graph frame: toolbar (layout toggle, zoom, fit) above the NVL canvas */
+.graph-frame {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-inset);
+}
+.graph-toolbar {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+.graph-toolbar button {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 0.15rem 0.55rem;
+  cursor: pointer;
+}
+.graph-toolbar button:hover {
+  border-color: var(--accent);
+}
+.graph-toolbar button[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Node detail side panel: fixed right, scrolls, overlays the page */
+.node-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 90vw);
+  background: var(--bg-raised);
+  border-left: 1px solid var(--border);
+  padding: 1rem 1.25rem;
+  overflow-y: auto;
+  z-index: 10;
+  font-size: var(--text-sm);
+}
+.node-panel h2 {
+  margin-top: 0;
+}
+.node-panel-close {
+  float: right;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: var(--text-md);
+  padding: 0 0.5rem;
+  cursor: pointer;
+}
+.node-panel-close:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.node-panel dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.75rem;
+  margin: 0.5rem 0;
+}
+.node-panel dt {
+  color: var(--text-dim);
+}
+.node-panel dd {
+  margin: 0;
+}
+
+/* Compact wave summary list: name + status chip, click opens the side panel */
+.wave-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.4rem 0 0.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.wave-list button {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: var(--text-sm);
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+}
+.wave-list button:hover {
+  border-color: var(--accent);
+}
+
+/* Feature detail tab bar: hash-addressable Graph / Timeline / Acceptance /
+   Repairs views of one feature */
+.tab-bar {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.tab-bar a {
+  padding: 0.3rem 0.8rem;
+  color: var(--text-dim);
+  font-size: var(--text-sm);
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+}
+.tab-bar a:hover {
+  color: var(--text);
+  text-decoration: none;
+}
+.tab-bar a[aria-current="page"] {
+  color: var(--text);
+  background: var(--bg-raised);
+  border-color: var(--border);
+}
+
+/* Timeline tab: per-node bars on one shared time axis; idle gaps are the
+   empty track between bars. Bar color is the status color language. */
+.timeline-axis {
+  font-size: var(--text-sm);
+  margin: 0.25rem 0 0.5rem;
+}
+.timeline-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.3rem 0;
+}
+.timeline-label {
+  flex: 0 0 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  color: var(--text-dim);
+}
+.timeline-track {
+  position: relative;
+  flex: 1;
+  height: 1.4rem;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.timeline-bar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  padding-left: 0.35rem;
+  color: var(--bg);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.timeline-bar[data-status="completed"] {
+  background: var(--status-completed);
+}
+.timeline-bar[data-status="in_progress"] {
+  background: var(--status-in-progress);
+}
+.timeline-bar[data-status="frontier"] {
+  background: var(--status-frontier);
+}
+.timeline-bar[data-status="blocked"] {
+  background: var(--status-blocked);
+}
+.timeline-bar[data-status="failed"] {
+  background: var(--status-failed);
+}
+.timeline-bar[data-status="cancelled"] {
+  background: var(--status-cancelled);
+}
+
+/* Acceptance tab: criteria list with covering nodes as status chips */
+.acceptance-list {
+  list-style: none;
+  padding: 0;
+}
+.acceptance-list > li {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  margin: 0.5rem 0;
+  font-size: var(--text-sm);
+}
+
+/* Repairs tab: review verdicts reuse the status colors */
+.review-verdict[data-verdict="pass"] {
+  color: var(--status-completed);
+}
+.review-verdict[data-verdict="fail"] {
+  color: var(--status-failed);
+}
+.failed-criteria {
+  color: var(--status-failed);
+  font-size: var(--text-sm);
+}
+.review-checklist {
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+/* Empty, loading and error states */
+.state {
+  padding: 1.5rem 1rem;
+  border-radius: 6px;
+  font-size: var(--text-sm);
+}
+.state-empty {
+  color: var(--text-dim);
+  border: 1px dashed var(--border);
+}
+.state-loading {
+  color: var(--text-dim);
+}
+.state-error {
+  color: var(--status-failed);
+  background: var(--bg-raised);
+  border: 1px solid var(--status-failed);
+}

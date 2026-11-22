@@ -1,6 +1,8 @@
 // GET /api/features/:slug/graph: the node list of one store — per node its
 // slug, title, type, derived status, wave, acceptance, dependencies, input and
-// output fields (with recorded values), and review verdicts.
+// output fields (with recorded values), review verdicts, model tier, failure
+// policy and run timestamps — plus the feature's acceptance criteria with the
+// nodes covering each.
 import type { Store } from "./discover.ts"
 import { queryStore } from "./query.ts"
 
@@ -21,7 +23,9 @@ WITH n, wave, depends_on, CASE
   ELSE n.status
 END AS state
 RETURN n.slug AS slug, n.title AS title, n.type AS type, state AS status, wave,
-       n.acceptance AS acceptance, depends_on
+       n.acceptance AS acceptance, depends_on,
+       n.model_tier AS model_tier, n.failure_policy AS failure_policy,
+       n.started_at AS started_at, n.completed_at AS completed_at
 ORDER BY wave, slug`
 
 // An input's recorded value is the upstream output's value through its FROM
@@ -35,8 +39,16 @@ ORDER BY node, direction, name`
 
 const REVIEWS_QUERY = `MATCH (n:GbuildNode)-[:REVIEWED]->(r:Review)
 RETURN n.slug AS node, r.attempt AS attempt, r.verdict AS verdict,
-       r.failed_criteria AS failed_criteria, r.at AS at
+       r.failed_criteria AS failed_criteria, r.checklist AS checklist, r.at AS at
 ORDER BY node, attempt`
+
+// Feature-level acceptance criteria, each with the slugs of the nodes whose
+// SATISFIES edges cover it.
+const ACCEPTANCE_QUERY = `MATCH (f:Feature)-[:HAS_ACCEPTANCE]->(a:Acceptance)
+OPTIONAL MATCH (n:GbuildNode)-[:SATISFIES]->(a)
+RETURN a.id AS id, a.text AS text,
+       [x IN collect(n.slug) WHERE x IS NOT NULL] AS covered_by
+ORDER BY id`
 
 export interface FieldValue {
   name: string
@@ -53,15 +65,26 @@ export interface GraphNode {
   wave: number
   acceptance: string[]
   depends_on: string[]
+  model_tier: string
+  failure_policy: string
+  started_at: string | null
+  completed_at: string | null
   inputs: FieldValue[]
   outputs: FieldValue[]
-  reviews: { attempt: number; verdict: string; failed_criteria: string[]; at: string }[]
+  reviews: { attempt: number; verdict: string; failed_criteria: string[]; checklist: string[]; at: string }[]
+}
+
+export interface AcceptanceCriterion {
+  id: string
+  text: string
+  covered_by: string[]
 }
 
 export interface GraphDetail {
   project: string
   slug: string
   destination: string
+  acceptance: AcceptanceCriterion[]
   nodes: GraphNode[]
 }
 
@@ -71,6 +94,7 @@ export async function graphDetail(store: Store): Promise<GraphDetail> {
   const nodeRows = await queryStore(store.db, NODES_QUERY)
   const fieldRows = await queryStore(store.db, FIELDS_QUERY)
   const reviewRows = await queryStore(store.db, REVIEWS_QUERY)
+  const acceptanceRows = await queryStore(store.db, ACCEPTANCE_QUERY)
   const nodes: GraphNode[] = nodeRows.map((row) => {
     const slug = String(row.slug)
     const fields = fieldRows.filter((f) => f.node === slug)
@@ -88,6 +112,10 @@ export async function graphDetail(store: Store): Promise<GraphDetail> {
       wave: Number(row.wave),
       acceptance: (row.acceptance as string[]) ?? [],
       depends_on: (row.depends_on as string[]) ?? [],
+      model_tier: String(row.model_tier),
+      failure_policy: String(row.failure_policy),
+      started_at: row.started_at == null ? null : String(row.started_at),
+      completed_at: row.completed_at == null ? null : String(row.completed_at),
       inputs: fields.filter((f) => f.direction === "INPUT").map(field),
       outputs: fields.filter((f) => f.direction === "OUTPUT").map(field),
       reviews: reviewRows
@@ -96,6 +124,7 @@ export async function graphDetail(store: Store): Promise<GraphDetail> {
           attempt: Number(r.attempt),
           verdict: String(r.verdict),
           failed_criteria: (r.failed_criteria as string[]) ?? [],
+          checklist: (r.checklist as string[]) ?? [],
           at: String(r.at),
         })),
     }
@@ -104,6 +133,11 @@ export async function graphDetail(store: Store): Promise<GraphDetail> {
     project: store.project,
     slug: String(feature.slug),
     destination: String(feature.destination),
+    acceptance: acceptanceRows.map((row) => ({
+      id: String(row.id),
+      text: String(row.text),
+      covered_by: ((row.covered_by as string[]) ?? []).sort(),
+    })),
     nodes,
   }
 }

@@ -45,13 +45,31 @@ Run from this directory:
 ## Using the UI
 
 - `#/` — feature list: project path, slug, destination, and per-status node
-  counts for every discovered store.
-- `#/features/<slug>` — graph detail: the dependency graph rendered with
-  [@neo4j-nvl/react](https://neo4j.com/docs/nvl/current/) (canvas renderer),
-  plus nodes grouped by wave with status, acceptance criteria, input/output
-  field values, and review verdicts.
+  counts for every discovered store, topped by a needs-attention section
+  listing the failed and blocked nodes across all stores (each links to its
+  feature).
+- `#/features/<slug>` — feature detail with hash-addressable tabs:
+  - **Graph** (default) — the dependency graph rendered with
+    [@neo4j-nvl/react](https://neo4j.com/docs/nvl/current/) (canvas renderer),
+    plus nodes grouped by wave; clicking a node or wave entry opens a side
+    panel with status, acceptance criteria, input/output field values, review
+    verdicts, and the node's notes and symbols.
+  - **Timeline** (`#/features/<slug>/timeline`) — each started node as a bar
+    on one shared time axis, colored by status, with run durations and the
+    idle gaps between nodes visible; unstarted nodes are listed below.
+  - **Acceptance** (`#/features/<slug>/acceptance`) — the feature's
+    acceptance criteria, each with its covering nodes as status chips;
+    uncovered criteria are flagged.
+  - **Repairs** (`#/features/<slug>/repairs`) — per-node review attempt
+    history: verdict, failed criteria and checklist lines per attempt.
+- `#/attention` — attention dashboard: every failed and blocked node across
+  all stores with project, feature, state, the dependencies it waits on, and
+  its last failed criteria.
+- `#/knowledge` — knowledge browser: implementer notes grouped by topic and
+  symbols (name, file, purpose, author) across all projects, filterable with
+  a text search box.
 
-Both views poll the API — default every 3000ms — and update in place. Override
+All views poll the API — default every 3000ms — and update in place. Override
 the interval with the `?poll=<ms>` query parameter, e.g.
 `http://localhost:8420/?poll=10000#/`.
 
@@ -60,7 +78,13 @@ the interval with the `?poll=<ms>` query parameter, e.g.
 - `GET /api/features` — one summary per store: `{ project, slug, destination, status_counts }`.
 - `GET /api/features/:slug/graph` — full node list of one store: slug, title,
   type, derived status (`pending` splits into `frontier`/`blocked`), wave,
-  acceptance, `depends_on`, inputs/outputs with recorded values, and reviews.
+  acceptance, `depends_on`, model tier, failure policy, run timestamps,
+  inputs/outputs with recorded values, and reviews with checklists — plus the
+  feature's acceptance criteria with the nodes covering each.
+- `GET /api/attention` — failed and blocked nodes across all stores:
+  `{ project, feature, node, state, waiting_on, last_failed_criteria }`.
+- `GET /api/knowledge` — notes and symbols across all stores, each with
+  `project`, `feature` and `by_node`.
 
 ## Layout
 
