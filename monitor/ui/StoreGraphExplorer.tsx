@@ -18,6 +18,7 @@ import type { Layout } from "@neo4j-nvl/base"
 import type { StoreGraph, StoreGraphNode, StoreGraphRel } from "./api.ts"
 import { resolveToken, statusColor } from "./colors.ts"
 import { GraphFrame } from "./GraphFrame.tsx"
+import { GraphElementList } from "./GraphElementList.tsx"
 
 export type Layer = "contract" | "acceptance" | "reviews" | "knowledge"
 
@@ -144,8 +145,8 @@ export interface StoreGraphExplorerProps {
   statusBySlug: ReadonlyMap<string, string>
   /** Element id shown in the side panel; its NVL node or rel is marked selected. */
   selectedId?: string | null
-  onNodeClick?: (id: string) => void
-  onRelClick?: (id: string) => void
+  onNodeClick?: (id: string, origin?: HTMLButtonElement) => void
+  onRelClick?: (id: string, origin?: HTMLButtonElement) => void
   onCanvasDoubleClick?: () => void
   /** Access to the NVL instance (zoom/fit controls, tests). */
   nvlRef?: RefObject<NVL | null>
@@ -207,49 +208,57 @@ export function StoreGraphExplorer({
   const relTypesPresent = useMemo(() => [...new Set(graph.rels.map((r) => r.type))].sort(), [graph])
 
   return (
-    <GraphFrame
-      nodes={styled.nodes}
-      rels={styled.rels}
-      layout={layout}
-      onLayoutChange={setPinnedLayout}
-      nvlRef={nvlRef}
-      mouseEventCallbacks={{
-        onZoomAndPan: true,
-        onNodeClick: (node: { id: string }) => onNodeClick?.(node.id),
-        onRelationshipClick: (rel: { id: string }) => onRelClick?.(rel.id),
-        onNodeDoubleClick: (node: { id: string }) => setFocus(node.id),
-        onCanvasDoubleClick: () => {
-          setFocus(null)
-          onCanvasDoubleClick?.()
-        },
-      }}
-    >
-      <div className="graph-legend">
-        <span className="legend-group">
-          layers:
-          {LAYERS.map((layer) => (
-            <button
-              key={layer.id}
-              type="button"
-              aria-pressed={layers.has(layer.id)}
-              onClick={() => toggleLayer(layer.id)}
-            >
-              {layer.id}
-            </button>
-          ))}
-        </span>
-        <span className="legend-group">
-          {relTypesPresent.map((type) => {
-            const color = relTypeColor(type)
-            return (
-              <span key={type} className="legend-item">
-                <span className="legend-swatch" data-color={color} style={{ backgroundColor: color }} />
-                {type}
-              </span>
-            )
-          })}
-        </span>
-      </div>
-    </GraphFrame>
+    <div className="store-graph-explorer">
+      <GraphFrame
+        nodes={styled.nodes}
+        rels={styled.rels}
+        layout={layout}
+        onLayoutChange={setPinnedLayout}
+        nvlRef={nvlRef}
+        mouseEventCallbacks={{
+          onZoomAndPan: true,
+          onNodeClick: (node: { id: string }) => onNodeClick?.(node.id),
+          onRelationshipClick: (rel: { id: string }) => onRelClick?.(rel.id),
+          onNodeDoubleClick: (node: { id: string }) => setFocus(node.id),
+          onCanvasDoubleClick: () => {
+            setFocus(null)
+            onCanvasDoubleClick?.()
+          },
+        }}
+      >
+        <div className="graph-legend">
+          <span className="legend-group">
+            layers:
+            {LAYERS.map((layer) => (
+              <button
+                key={layer.id}
+                type="button"
+                aria-pressed={layers.has(layer.id)}
+                onClick={() => toggleLayer(layer.id)}
+              >
+                {layer.id}
+              </button>
+            ))}
+          </span>
+          <span className="legend-group">
+            {relTypesPresent.map((type) => {
+              const color = relTypeColor(type)
+              return (
+                <span key={type} className="legend-item">
+                  <span className="legend-swatch" data-color={color} style={{ backgroundColor: color }} />
+                  {type}
+                </span>
+              )
+            })}
+          </span>
+        </div>
+      </GraphFrame>
+      <GraphElementList
+        graph={graph}
+        selectedId={selectedId}
+        onNodeClick={onNodeClick}
+        onRelClick={onRelClick}
+      />
+    </div>
   )
 }

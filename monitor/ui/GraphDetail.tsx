@@ -7,11 +7,10 @@
 // (per-node review attempt history) and Query (ad-hoc read-only Cypher
 // console). Polls /api/features/:ref/graph, /api/features/:ref/store-graph
 // and /api/knowledge.
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import type { RefObject } from "react"
 import type NVL from "@neo4j-nvl/base"
 import type { GraphNode } from "../src/graph.ts"
-import type { StoreGraphNode, StoreGraphRel } from "../src/storegraph.ts"
 import { AcceptanceTab } from "./AcceptanceTab.tsx"
 import { AmbiguousStoreError, fetchGraph, fetchKnowledge, fetchStoreGraph } from "./api.ts"
 import { ElementPanel } from "./ElementPanel.tsx"
@@ -57,37 +56,47 @@ export function GraphDetail({
   )
   const { data: knowledge } = usePoll(tab === "graph" ? fetchKnowledge : null, pollInterval)
   const [selectedSlug, setSelectedSlug] = useState<string | null>(node ?? null)
-  const [selectedElement, setSelectedElement] = useState<StoreGraphNode | null>(null)
-  const [selectedRel, setSelectedRel] = useState<StoreGraphRel | null>(null)
+  const [selectedElementId, setSelectedElementId] = useState<string | null>(null)
+  const panelHeading = useRef<HTMLHeadingElement>(null)
+  const focusOrigin = useRef<HTMLButtonElement | null>(null)
+  const focusRequested = useRef(false)
+  const featureSection = useRef<HTMLElement>(null)
 
   useEffect(() => {
     setSelectedSlug(node ?? null)
-    if (node) {
-      setSelectedElement(null)
-      setSelectedRel(null)
-    }
+    if (node) setSelectedElementId(null)
   }, [slug, node])
 
-  const selectNode = (nodeSlug: string | null) => {
+  const selectNode = useCallback((nodeSlug: string | null) => {
     setSelectedSlug(nodeSlug)
     onNodeChange?.(nodeSlug ?? undefined)
-  }
+  }, [onNodeChange])
 
-  const clearSelection = () => {
+  const clearSelection = useCallback(() => {
     selectNode(null)
-    setSelectedElement(null)
-    setSelectedRel(null)
-  }
+    setSelectedElementId(null)
+    focusRequested.current = false
+    const origin = focusOrigin.current
+    focusOrigin.current = null
+    if (origin?.isConnected) origin.focus()
+    else if (origin) featureSection.current?.querySelector<HTMLInputElement>(".graph-element-list input")?.focus()
+  }, [selectNode])
 
-  // Esc closes the side panel.
+  useLayoutEffect(() => {
+    if (focusRequested.current && panelHeading.current) {
+      panelHeading.current.focus()
+      focusRequested.current = false
+    }
+  })
+
   useEffect(() => {
-    if (!selectedSlug && !selectedElement && !selectedRel) return
+    if (tab !== "graph" || (!selectedSlug && !selectedElementId)) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") clearSelection()
     }
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
-  }, [selectedSlug, selectedElement, selectedRel, onNodeChange])
+  }, [tab, selectedSlug, selectedElementId, clearSelection])
 
   if (error instanceof AmbiguousStoreError) return (
     <section>
@@ -111,25 +120,39 @@ export function GraphDetail({
     selected !== null && item.by_node === selected.slug && item.store_id === data.store_id
   const statusBySlug = new Map(data.nodes.map((n) => [n.slug, n.status]))
 
-  // A graph click on a GbuildNode opens the node panel as before; any other
-  // label opens the generic element panel. A relationship click opens the
-  // element panel on that rel.
-  const onExplorerNodeClick = (id: string) => {
-    const element = storeData?.nodes.find((n) => n.id === id)
-    setSelectedRel(null)
+  const selectedElement = selectedElementId === null ? null
+    : storeData?.nodes.find((element) => element.id === selectedElementId)
+      ?? storeData?.rels.find((element) => element.id === selectedElementId)
+      ?? null
+
+  const openNode = (nodeSlug: string, origin?: HTMLButtonElement) => {
+    focusOrigin.current = origin ?? null
+    if (origin && nodeSlug === selectedSlug) panelHeading.current?.focus()
+    else focusRequested.current = Boolean(origin)
+    setSelectedElementId(null)
+    selectNode(nodeSlug)
+  }
+
+  const openElement = (id: string, requestFocus: boolean) => {
+    if (requestFocus && id === selectedElementId) panelHeading.current?.focus()
+    else focusRequested.current = requestFocus
+    selectNode(null)
+    setSelectedElementId(id)
+  }
+
+  const onExplorerNodeClick = (id: string, origin?: HTMLButtonElement) => {
+    const element = storeData?.nodes.find((candidate) => candidate.id === id)
     if (element?.labels.includes("GbuildNode")) {
-      selectNode(String(element.properties.slug))
-      setSelectedElement(null)
+      openNode(String(element.properties.slug), origin)
     } else {
-      setSelectedElement(element ?? null)
-      selectNode(null)
+      focusOrigin.current = origin ?? null
+      openElement(id, Boolean(origin))
     }
   }
 
-  const onExplorerRelClick = (id: string) => {
-    setSelectedRel(storeData?.rels.find((r) => r.id === id) ?? null)
-    selectNode(null)
-    setSelectedElement(null)
+  const onExplorerRelClick = (id: string, origin?: HTMLButtonElement) => {
+    focusOrigin.current = origin ?? null
+    openElement(id, Boolean(origin))
   }
 
   // The selected GbuildNode's store-graph id comes from the fetched graph —
@@ -147,7 +170,7 @@ export function GraphDetail({
     waves.set(node.wave, group)
   }
   return (
-    <section>
+    <section ref={featureSection}>
       <h1>{data.slug}</h1>
       <RefreshNotice error={error} updatedAt={updatedAt} />
       <p>
@@ -170,7 +193,7 @@ export function GraphDetail({
       ) : tab === "repairs" ? (
         <RepairsTab nodes={data.nodes} />
       ) : tab === "query" ? (
-        <QueryTab slug={data.store_id} />
+        <QueryTab key={data.store_id} storeId={data.store_id} project={data.project} feature={data.slug} />
       ) : (
         <>
           <RefreshNotice error={storeError} updatedAt={storeUpdatedAt} />
@@ -180,7 +203,7 @@ export function GraphDetail({
             <StoreGraphExplorer
               graph={storeData}
               statusBySlug={statusBySlug}
-              selectedId={selectedNodeId ?? selectedElement?.id ?? selectedRel?.id ?? null}
+              selectedId={selectedNodeId ?? selectedElementId}
               onNodeClick={onExplorerNodeClick}
               onRelClick={onExplorerRelClick}
               onCanvasDoubleClick={clearSelection}
@@ -192,14 +215,18 @@ export function GraphDetail({
               node={selected}
               notes={(knowledge?.notes ?? []).filter(leftBySelected)}
               symbols={(knowledge?.symbols ?? []).filter(leftBySelected)}
-              onClose={() => selectNode(null)}
+              headingRef={panelHeading}
+              onClose={clearSelection}
             />
           )}
           {selectedElement && storeData && (
-            <ElementPanel element={selectedElement} graph={storeData} onClose={() => setSelectedElement(null)} />
-          )}
-          {selectedRel && storeData && (
-            <ElementPanel element={selectedRel} graph={storeData} onClose={() => setSelectedRel(null)} />
+            <ElementPanel
+              element={selectedElement}
+              graph={storeData}
+              headingRef={panelHeading}
+              onClose={clearSelection}
+              onInspectRelationship={(id) => openElement(id, true)}
+            />
           )}
           {[...waves.entries()]
             .sort(([a], [b]) => a - b)
@@ -211,11 +238,7 @@ export function GraphDetail({
                     <li key={node.slug}>
                       <button
                         type="button"
-                        onClick={() => {
-                          selectNode(node.slug)
-                          setSelectedElement(null)
-                          setSelectedRel(null)
-                        }}
+                        onClick={(event) => openNode(node.slug, event.currentTarget)}
                       >
                         <span className="mono">{node.slug}</span> <StatusChip status={node.status} />
                       </button>

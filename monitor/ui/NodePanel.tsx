@@ -2,6 +2,7 @@
 // properties, acceptance criteria, input/output field values, review history,
 // and the notes/symbols the node left. Opened by clicking a graph node or a
 // wave-list entry; closed via the close button, Esc, or canvas double-click.
+import type { Ref } from "react"
 import type { FieldValue, GraphNode } from "../src/graph.ts"
 import type { KnowledgeNote, KnowledgeSymbol } from "../src/knowledge.ts"
 import { StatusChip } from "./StatusChip.tsx"
@@ -44,15 +45,18 @@ export interface NodePanelProps {
   notes: KnowledgeNote[]
   symbols: KnowledgeSymbol[]
   onClose: () => void
+  headingRef?: Ref<HTMLHeadingElement>
 }
 
-export function NodePanel({ node, notes, symbols, onClose }: NodePanelProps) {
+export function NodePanel({ node, notes, symbols, onClose, headingRef }: NodePanelProps) {
+  const startedAt = node.status === "in_progress" ? node.active_attempt?.started_at ?? null : node.started_at
+  const completedAt = node.status === "in_progress" ? node.active_attempt?.completed_at ?? null : node.completed_at
   return (
     <aside className="node-panel" aria-label={`node ${node.slug}`}>
       <button type="button" className="node-panel-close" aria-label="close panel" onClick={onClose}>
         ×
       </button>
-      <h2>
+      <h2 tabIndex={-1} ref={headingRef}>
         <span className="mono">{node.slug}</span> <StatusChip status={node.status} />
       </h2>
       <p>{node.title}</p>
@@ -66,11 +70,11 @@ export function NodePanel({ node, notes, symbols, onClose }: NodePanelProps) {
         <dt>failure policy</dt>
         <dd className="mono">{node.failure_policy}</dd>
         <dt>started</dt>
-        <dd className="mono">{node.started_at ?? "—"}</dd>
+        <dd className="mono">{startedAt ?? "—"}</dd>
         <dt>completed</dt>
-        <dd className="mono">{node.completed_at ?? "—"}</dd>
+        <dd className="mono">{completedAt ?? "—"}</dd>
         <dt>duration</dt>
-        <dd className="mono">{formatDuration(node.started_at, node.completed_at)}</dd>
+        <dd className="mono">{formatDuration(startedAt, completedAt)}</dd>
       </dl>
       {node.acceptance.length > 0 && (
         <div>

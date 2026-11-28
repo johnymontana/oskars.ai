@@ -6,11 +6,17 @@ verdicts — live, without reloading.
 
 ## Setup
 
+From the repository root:
+
 ```sh
-npm install
+npm ci
+npm ci --prefix monitor
+npm run build --prefix monitor
 ```
 
-Requires the [`relate` CLI](https://github.com/neo4j-labs/relate) on `PATH` —
+The root install provides `tsx` and TypeScript. The monitor test dependencies require a
+current Node.js patch release, such as Node 22.22.2+ or Node 24.15.0+ in their respective series.
+The API requires the [`relate` CLI](https://github.com/neo4j-labs/relate) on `PATH` —
 the API shells out to it to read each store read-only.
 
 ### Config file
@@ -30,13 +36,13 @@ one feature in the UI:
 
 Run from this directory:
 
-- `npm start -- <config.json> [port]` — starts the API server. When
-  `dist/` exists (see `build`), the same server also serves the built UI, so
-  this is the production entry point. Without a port, a random free port is
-  chosen and printed.
+- `npm start -- <config.json> [port] [--host <address>]` starts the API and
+  serves the built UI when `dist/` exists. It binds to `127.0.0.1` by default.
+  Without a port, it selects a free port and prints the bound URL. Use `--host`
+  explicitly to allow access outside loopback.
 - `npm run dev` — Vite dev server with hot reload for UI work. It proxies
   `/api` to a running API server (`MONITOR_API_URL`, default
-  `http://localhost:8420`), so start the API first:
+  `http://127.0.0.1:8420`), so start the API first:
   `npm start -- config.json 8420`.
 - `npm run build` — bundles the UI into `dist/`.
 - `npm test` — runs the API and UI tests (`node --import tsx --test`). The API
@@ -45,10 +51,12 @@ Run from this directory:
 ## Using the UI
 
 - `#/` — feature list: project path, slug, destination, and per-status node
-  counts for every discovered store, topped by a needs-attention section
-  listing the failed and blocked nodes across all stores (each links to its
-  feature).
-- `#/features/<slug>` — feature detail with hash-addressable tabs:
+  counts for every discovered store. The dashboard reports unreadable roots
+  or stores and shows when the displayed data was last refreshed.
+- `#/features/<store-id>` — feature detail with hash-addressable tabs. The store
+  ID identifies the database even when projects reuse a slug. Legacy
+  `#/features/<slug>` links work for a single match and show a project chooser for
+  ambiguous slugs.
   - **Graph** (default) — the whole store as an inspectable graph, rendered
     with [@neo4j-nvl/react](https://neo4j.com/docs/nvl/current/) (canvas
     renderer): the dependency skeleton (`GbuildNode` + `DEPENDS_ON`, status
@@ -63,23 +71,28 @@ Run from this directory:
     them. Clicking a graph element or wave entry opens a side panel: the full
     node detail (status, acceptance criteria, input/output field values, review
     verdicts, notes and symbols) for a `GbuildNode`, or a generic element panel
-    with the element's labels and properties for any other label. Nodes are
-    also grouped by wave below the graph.
-  - **Timeline** (`#/features/<slug>/timeline`) — each started node as a bar
+    with the element's labels and properties for any other label. The searchable
+    graph element list opens the same panels by keyboard, including for fields and
+    relationships outside the current canvas layers. Escape closes the panel and
+    returns focus to the control that opened it. Nodes are also grouped by wave.
+  - **Timeline** (`#/features/<store-id>/timeline`) — each started node as a bar
     on one shared time axis, colored by status, with run durations and the
-    idle gaps between nodes visible; unstarted nodes are listed below.
-  - **Acceptance** (`#/features/<slug>/acceptance`) — the feature's
+    idle gaps between nodes visible. Active attempts with a recorded start show
+    elapsed time. For older stores, running nodes without timestamps are listed
+    separately from nodes that haven't started.
+  - **Acceptance** (`#/features/<store-id>/acceptance`) — the feature's
     acceptance criteria, each with its covering nodes as status chips;
     uncovered criteria are flagged.
-  - **Repairs** (`#/features/<slug>/repairs`) — per-node review attempt
+  - **Repairs** (`#/features/<store-id>/repairs`) — per-node review attempt
     history: verdict, failed criteria and checklist lines per attempt.
-  - **Query** (`#/features/<slug>/query`) — an ad-hoc read-only Cypher console
+  - **Query** (`#/features/<store-id>/query`) — an ad-hoc read-only Cypher console
     against the feature's store: returned rows render as a table, rows carrying
-    node/relationship values also render as an NVL graph, and a rejected
-    statement shows the server's error message.
-- `#/attention` — attention dashboard: every failed and blocked node across
-  all stores with project, feature, state, the dependencies it waits on, and
-  its last failed criteria.
+    node/relationship values also render as an NVL graph. Load the example to
+    query task slugs and statuses. The console reports when it shows the first
+    500 rows of a larger result.
+- `#/attention` — failures with their latest failed criteria and count of affected
+  nodes, followed by work blocked by failures and work waiting on ordinary
+  dependencies. Node links open the corresponding detail panel.
 - `#/knowledge` — knowledge browser, topped by the cross-store knowledge
   graph: symbols merged by name+file across projects, connected to every
   defining feature, and notes linked through shared topic hubs. Below it the
@@ -88,26 +101,30 @@ Run from this directory:
 
 All views poll the API — default every 3000ms — and update in place. Override
 the interval with the `?poll=<ms>` query parameter, e.g.
-`http://localhost:8420/?poll=10000#/`.
+`http://127.0.0.1:8420/?poll=10000#/`.
 
 ## REST API
 
-- `GET /api/features` — one summary per store: `{ project, slug, destination, status_counts }`.
-- `GET /api/features/:slug/graph` — full node list of one store: slug, title,
+- `GET /api/overview` — dashboard snapshot with `features`, `attention`,
+  `diagnostics`, and `observed_at`.
+- `GET /api/features` — one summary per store with `store_id`, `project`, `slug`,
+  `destination`, and `status_counts`.
+- `GET /api/features/:ref/graph` — full node list of one store: slug, title,
   type, derived status (`pending` splits into `frontier`/`blocked`), wave,
   acceptance, `depends_on`, model tier, failure policy, run timestamps,
   inputs/outputs with recorded values, and reviews with checklists — plus the
   feature's acceptance criteria with the nodes covering each.
-- `GET /api/attention` — failed and blocked nodes across all stores:
-  `{ project, feature, node, state, waiting_on, last_failed_criteria }`.
+- `GET /api/attention` — failed and blocked nodes across all stores. Entries
+  include `store_id`, dependency slugs in `waiting_on` and `blocking_failures`,
+  `blocked_count`, and `last_failed_criteria`.
 - `GET /api/knowledge` — notes and symbols across all stores, each with
   `project`, `feature` and `by_node`.
-- `POST /api/features/:slug/query` — read-only Cypher against one store:
-  request `{ cypher }`, response `{ rows }` with rows capped at 500; node/rel
+- `POST /api/features/:ref/query` — read-only Cypher against one store.
+  Send `{ cypher }` and receive `{ rows, truncated, limit }`. Node and relationship
   values inside rows serialize the relate jsonl way (`{ id, kind, labels,
   properties }` / `{ id, kind, type, start_node, end_node, properties }`).
-  `400` for an invalid body, invalid Cypher or a rejected write, `404` for an
-  unknown feature slug.
+  Feature endpoints accept store IDs and unambiguous legacy slugs. Unknown
+  references return `404`, and ambiguous slugs return `409` with project matches.
 - `GET /api/knowledge/graph` — the same knowledge as a cross-store graph:
   `Symbol` nodes merged by name+file, individual `Note` nodes linked to
   shared `Topic` hubs, one `Feature` node per store, and

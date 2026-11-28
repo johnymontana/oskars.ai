@@ -9,6 +9,7 @@ import "./fixtures.ts"
 import { act, render } from "./helpers.tsx"
 
 const { App } = await import("../ui/App.tsx")
+const { QueryTab } = await import("../ui/QueryTab.tsx")
 
 describe("query tab", () => {
   test("Cypher console renders rows as a table, node/rel rows also render an NVL graph, rejections show the error", async () => {
@@ -21,7 +22,7 @@ describe("query tab", () => {
     }
     await goto("#/features/alpha/query")
     const tabBar = container.querySelector(".tab-bar")
-    assert.ok(tabBar?.querySelector("a[href='#/features/alpha/query']"), "tab bar links to the query tab")
+    assert.ok(tabBar?.querySelector("a[href='#/features/store-alpha/query']"), "tab bar links to the query tab")
     assert.equal(container.querySelector(".tab-bar a[aria-current='page']")?.textContent, "Query")
     assert.ok(!container.querySelector("#NVL_interactive-wrapper"), "query tab does not mount the dependency graph")
 
@@ -72,5 +73,37 @@ describe("query tab", () => {
     assert.ok(!container.querySelector("table.query-results"), "a failed query clears the previous results")
     await unmount()
     window.location.hash = ""
+  })
+
+  test("loads the starter query, names the store and distinguishes exact and truncated results", async () => {
+    const initialFetch = globalThis.fetch
+    let truncated = false
+    let cypher = ""
+    globalThis.fetch = async (path, init) => {
+      assert.equal(path, "/api/features/store-alpha/query")
+      cypher = JSON.parse(String(init?.body)).cypher
+      const rows = Array.from({ length: 500 }, (_, node) => ({ node }))
+      return Response.json({ rows, truncated, limit: 500 })
+    }
+    const { container, unmount } = await render(<QueryTab storeId="store-alpha" project="/repo/project-one" feature="alpha" />)
+    try {
+      assert.match(container.textContent ?? "", /Read-only Cypher for alpha in \/repo\/project-one/)
+      const example = container.querySelector<HTMLButtonElement>("button[type=button]")
+      const run = container.querySelector<HTMLButtonElement>("button[type=submit]")
+      assert.ok(example && run)
+      assert.ok(run.disabled, "the editor requires a query")
+      await act(async () => example.click())
+      assert.match(container.querySelector("textarea")?.value ?? "", /MATCH \(n:GbuildNode\).*LIMIT 20/)
+      await act(async () => run.click())
+      assert.match(cypher, /GbuildNode/)
+      assert.equal(container.querySelector("[role=status]")?.textContent, "500 rows")
+
+      truncated = true
+      await act(async () => run.click())
+      assert.equal(container.querySelector("[role=status]")?.textContent, "Showing the first 500 rows")
+    } finally {
+      await unmount()
+      globalThis.fetch = initialFetch
+    }
   })
 })

@@ -3,6 +3,7 @@
 import { createRoot } from "react-dom/client"
 import { App } from "./App.tsx"
 import "./theme.css"
+import "./graph-tools.css"
 
 const requested = Number(new URLSearchParams(window.location.search).get("poll"))
 

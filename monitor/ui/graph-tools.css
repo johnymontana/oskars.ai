@@ -1,0 +1,112 @@
+.store-graph-explorer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(15rem, 28%);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.graph-element-list {
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  font-size: var(--text-sm);
+}
+
+.graph-element-list label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-weight: 600;
+}
+
+.graph-element-list p {
+  margin: 0.4rem 0;
+}
+
+.graph-element-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 23rem;
+  overflow: auto;
+}
+
+.graph-element-list li + li {
+  margin-top: 0.25rem;
+}
+
+.graph-element-list button,
+.element-panel .element-relationship {
+  padding: 0.35rem 0.5rem;
+  background: var(--bg-inset);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.graph-element-list li button {
+  width: 100%;
+}
+
+.graph-element-list button small {
+  display: block;
+  color: var(--text-dim);
+}
+
+.graph-element-list button[aria-current],
+.graph-element-list button:hover,
+.element-panel .element-relationship:hover {
+  border-color: var(--accent);
+}
+
+.graph-element-list button:focus-visible,
+.element-panel .element-relationship:focus-visible,
+.node-panel h2:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.graph-elements-more {
+  margin-top: 0.4rem;
+}
+
+.element-panel dd,
+.element-panel h2 {
+  overflow-wrap: anywhere;
+}
+
+.element-panel .element-relationship {
+  margin-bottom: 0.25rem;
+}
+
+@media (max-width: 44rem) {
+  .store-graph-explorer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.query-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.query-actions button[type="button"] {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: var(--text-xs);
+  padding: 0.3rem 0.9rem;
+  cursor: pointer;
+}
+
+.query-actions button[type="button"]:hover {
+  border-color: var(--accent);
+}

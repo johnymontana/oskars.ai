@@ -4,6 +4,7 @@
 // Runs in jsdom (no vite needed):  node --import tsx --test monitor/test/store-explorer.test.tsx
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
+import { dom } from "./setup.ts"
 import { STATUS_BY_SLUG, STORE_GRAPH } from "./fixtures.ts"
 import { React, act, render } from "./helpers.tsx"
 
@@ -232,10 +233,10 @@ describe("store graph explorer", () => {
     for (const expected of [
       "incoming",
       "INPUT",
-      "GbuildNode:b-use",
+      "b-use",
       "outgoing",
       "FROM",
-      "Field:a-impl:output:value",
+      "a-impl output value",
     ]) {
       assert.ok(panelText.includes(expected), `element panel should contain ${JSON.stringify(expected)}`)
     }
@@ -271,5 +272,41 @@ describe("store graph explorer", () => {
     }
     assert.ok(!container.querySelector(".node-panel:not(.element-panel)"), "a rel click does not open the node panel")
     await unmount()
+  })
+
+  test("the searchable graph list opens field and relationship details and restores focus", async () => {
+    const { container, unmount } = await render(<GraphDetail slug="alpha" pollInterval={60_000} />)
+    try {
+      const search = container.querySelector<HTMLInputElement>(".graph-element-list input[type=search]")
+      assert.ok(search)
+      search.focus()
+      const setValue = Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value")?.set
+      assert.ok(setValue)
+      await act(async () => {
+        setValue.call(search, "b-use input value")
+        search.dispatchEvent(new dom.window.Event("input", { bubbles: true }))
+      })
+      const field = [...container.querySelectorAll<HTMLButtonElement>(".graph-element-list li button")]
+        .find((button) => button.textContent === "b-use input valueField")
+      assert.ok(field, "a field is available even when its canvas layer is off")
+      field.focus()
+      await act(async () => field.click())
+      let panel = container.querySelector(".element-panel")
+      assert.equal(document.activeElement, panel?.querySelector("h2"))
+
+      const from = [...(panel?.querySelectorAll<HTMLButtonElement>(".element-relationship") ?? [])]
+        .find((button) => button.textContent?.includes("FROM a-impl output value"))
+      assert.ok(from)
+      await act(async () => from.click())
+      panel = container.querySelector(".element-panel")
+      assert.equal(panel?.querySelector("h2")?.textContent, "FROM")
+      assert.equal(document.activeElement, panel?.querySelector("h2"))
+
+      await act(async () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })))
+      assert.ok(!container.querySelector(".element-panel"))
+      assert.equal(document.activeElement, field)
+    } finally {
+      await unmount()
+    }
   })
 })

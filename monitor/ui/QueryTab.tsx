@@ -2,11 +2,11 @@
 // Submits to POST /api/features/:slug/query and renders the returned rows as a
 // table; rows carrying node/rel values (relate jsonl shape) additionally
 // render as an NVL graph. Rejected statements show the server's error message.
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { FormEvent } from "react"
 import type { Layout } from "@neo4j-nvl/base"
 import { postQuery } from "./api.ts"
-import type { QueryRow } from "./api.ts"
+import type { QueryResult, QueryRow } from "./api.ts"
 import { GraphFrame } from "./GraphFrame.tsx"
 
 // Node/rel values inside rows serialize the relate jsonl way:
@@ -67,51 +67,80 @@ export const toResultGraph = (rows: QueryRow[]) => {
   }
 }
 
-export function QueryTab({ slug }: { slug: string }) {
+const EXAMPLE = "MATCH (n:GbuildNode) RETURN n.slug AS node, n.status AS status ORDER BY node LIMIT 20"
+
+export function QueryTab({ storeId, project, feature }: { storeId: string; project: string; feature: string }) {
   const [cypher, setCypher] = useState("")
-  const [rows, setRows] = useState<QueryRow[] | null>(null)
+  const [result, setResult] = useState<QueryResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const [layout, setLayout] = useState<Layout>("forceDirected")
+  const request = useRef<AbortController | null>(null)
+
+  useEffect(() => () => request.current?.abort(), [])
 
   const run = async (event: FormEvent) => {
     event.preventDefault()
+    if (request.current || !cypher.trim()) return
+    const controller = new AbortController()
+    request.current = controller
     setRunning(true)
     setError(null)
     try {
-      setRows((await postQuery(slug, cypher)).rows)
+      const next = await postQuery(storeId, cypher, controller.signal)
+      if (!controller.signal.aborted) setResult(next)
     } catch (cause) {
-      setRows(null)
-      setError((cause as Error).message)
+      if (!controller.signal.aborted) {
+        setResult(null)
+        setError((cause as Error).message)
+      }
     } finally {
-      setRunning(false)
+      request.current = null
+      if (!controller.signal.aborted) setRunning(false)
     }
   }
 
+  const rows = result?.rows ?? null
   const columns = rows ? [...new Set(rows.flatMap((row) => Object.keys(row)))] : []
   const graph = rows ? toResultGraph(rows) : { nodes: [], rels: [] }
 
   return (
     <section className="query-console">
+      <p className="text-dim">
+        Read-only Cypher for <strong>{feature}</strong> in <code>{project}</code>
+      </p>
       <form onSubmit={run}>
         <textarea
           aria-label="Cypher"
           className="mono"
           rows={4}
-          placeholder="MATCH (n:Node) RETURN n.slug, n.status"
+          placeholder={EXAMPLE}
           value={cypher}
           onChange={(event) => setCypher(event.target.value)}
         />
-        <button type="submit" disabled={running}>
-          {running ? "running…" : "run query"}
-        </button>
+        <div className="query-actions">
+          <button type="submit" disabled={running || !cypher.trim()}>
+            {running ? "running…" : "run query"}
+          </button>
+          <button type="button" disabled={running} onClick={() => setCypher(EXAMPLE)}>
+            Load example
+          </button>
+        </div>
       </form>
       {error && (
         <p role="alert" className="state state-error">
           {error}
         </p>
       )}
-      {rows && rows.length === 0 && <p className="state state-empty">no rows returned</p>}
+      {result && (
+        <p className="state" role="status">
+          {result.truncated
+            ? `Showing the first ${result.limit} rows`
+            : result.rows.length === 0
+              ? "no rows returned"
+              : `${result.rows.length} ${result.rows.length === 1 ? "row" : "rows"}`}
+        </p>
+      )}
       {rows && rows.length > 0 && (
         <table className="query-results">
           <thead>
