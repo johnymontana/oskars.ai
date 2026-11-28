@@ -1,0 +1,29 @@
+{
+  "name": "stellar-review",
+  "version": "0.1.2",
+  "description": "Strict maintainability review as a deterministic pipeline: scripted facts, cross-round ledger, pre-digested briefs, four focused passes (structure, branching, boundaries, comparison), scripted posting and verdict.",
+  "author": {
+    "name": "Oskar Hane",
+    "email": "oskar.hane@gmail.com",
+    "url": "https://github.com/oskarhane"
+  },
+  "homepage": "https://github.com/oskarhane/oskars.ai/tree/main/plugins/stellar-review",
+  "repository": "https://github.com/oskarhane/oskars.ai",
+  "license": "MIT",
+  "keywords": [
+    "ai",
+    "agent",
+    "code-review",
+    "maintainability",
+    "review",
+    "pipeline",
+    "claude"
+  ],
+  "skills": "./codex/",
+  "interface": {
+    "displayName": "Stellar Review",
+    "shortDescription": "Review maintainability with four focused passes",
+    "developerName": "Oskar Hane",
+    "category": "Developer Tools"
+  }
+}

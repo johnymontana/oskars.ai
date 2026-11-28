@@ -10,7 +10,7 @@ Agent plugins by Oskar Hane. All plugins support Claude Code. The table shows wh
 | [coding-skills](./plugins/coding-skills/) | Language-specific coding skills (TypeScript security, more to come) | | |
 | [product-skills](./plugins/product-skills/) | Product management skills — discovery, specs, prioritization, and reviews | | |
 | [gbuild](./plugins/gbuild/) | Graph-native task planning and execution: dependency-graph plans, concurrent fan-out, per-node review | ✓ | ✓ |
-| [stellar-review](./plugins/stellar-review/) | Strict maintainability review as a deterministic pipeline: scripted facts, cross-round ledger, four focused passes, scripted verdict | | ✓ |
+| [stellar-review](./plugins/stellar-review/) | Strict maintainability review as a deterministic pipeline: scripted facts, cross-round ledger, four focused passes, scripted verdict | ✓ | ✓ |
 
 ## Install
 
@@ -21,15 +21,17 @@ claude plugin marketplace add oskarhane/oskars.ai
 claude plugin install autoresearch@oskars.ai
 ```
 
-For gbuild in Codex:
+Register the marketplace in Codex and install the plugins you want:
 
 ```bash
 codex plugin marketplace add oskarhane/oskars.ai
 codex plugin add gbuild@oskars-ai
+codex plugin add stellar-review@oskars-ai
 ```
 
-Start a new Codex session and use `$gbuild:design` or `$gbuild:plan`. See the
-[gbuild installation guide](./plugins/gbuild/README.md#codex) for prerequisites and updates.
+Start a new Codex session and use `$gbuild:design`, `$gbuild:plan`, or `$stellar-review:review`.
+See the [gbuild guide](./plugins/gbuild/README.md#codex) and the
+[Stellar Review guide](./plugins/stellar-review/README.md#codex) for prerequisites and updates.
 
 For plugins marked OpenCode-compatible (gbuild, stellar-review):
 

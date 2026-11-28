@@ -92,7 +92,7 @@ jobs:
           npm install --global @openai/codex@0.172.0
           codex plugin marketplace add "$GITHUB_WORKSPACE"
           codex plugin add gbuild@oskars-ai
-          node plugins/gbuild/scripts/smoke-codex.mjs
+          node scripts/smoke-codex.mjs gbuild
 
       - name: Commit the bump
         env:

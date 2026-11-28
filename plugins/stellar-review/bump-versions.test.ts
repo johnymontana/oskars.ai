@@ -1,7 +1,7 @@
-// Tests for scripts/bump-versions.mjs, the lockstep bump for stellar-review's
-// two manifests. Spawns the script as a subprocess (the way the release process
+// Tests for scripts/bump-versions.mjs, the lockstep bump for stellar-review's three
+// manifests. Spawns the script as a subprocess (the way the release process
 // invokes it) against fixture manifests in a throwaway temp dir — never the
-// real package.json / .claude-plugin/plugin.json — covering the three bump
+// real manifests — covering the three bump
 // levels and the version-drift refusal. Run via repo-root `npm test`.
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
@@ -36,58 +36,66 @@ const pluginJsonText = (version: string) => `{
 }
 `
 
-const writeFixtures = (packageVersion: string, pluginVersion: string = packageVersion) => {
+const writeFixtures = (version: string, overrides: { claude?: string, codex?: string } = {}) => {
   const dir = mkdtempSync(join(tmpdir(), "stellar-bump-"))
   const packageJson = join(dir, "package.json")
   const pluginJson = join(dir, "plugin.json")
-  writeFileSync(packageJson, packageJsonText(packageVersion))
-  writeFileSync(pluginJson, pluginJsonText(pluginVersion))
-  return { packageJson, pluginJson }
+  const codexJson = join(dir, "codex-plugin.json")
+  writeFileSync(packageJson, packageJsonText(version))
+  writeFileSync(pluginJson, pluginJsonText(overrides.claude ?? version))
+  writeFileSync(codexJson, pluginJsonText(overrides.codex ?? version))
+  return { packageJson, pluginJson, codexJson }
 }
 
 // The documented invocation, run the way the release process runs it: node
-// scripts/bump-versions.mjs <level> with plugins/stellar-review/ as the cwd,
-// paths overridden at the fixtures. `root` is plugins/stellar-review/ wherever
-// the runner starts from, so this holds under repo-root `npm test` too.
-const bump = (level: string, packageJson: string, pluginJson: string) =>
+// scripts/bump-versions.mjs <level> with plugins/gbuild/ as the cwd, paths
+// overridden at the fixtures. `root` is plugins/gbuild/ wherever the runner
+// starts from, so this holds under repo-root `npm test` too.
+const bump = (level: string, { packageJson, pluginJson, codexJson }: ReturnType<typeof writeFixtures>) =>
   spawnSync(
     process.execPath,
-    ["scripts/bump-versions.mjs", level, "--package-json", packageJson, "--plugin-json", pluginJson],
+    ["scripts/bump-versions.mjs", level, "--package-json", packageJson, "--plugin-json", pluginJson,
+      "--codex-json", codexJson],
     { cwd: root, encoding: "utf8" },
   )
 
-test("patch, minor and major each bump both manifests from 0.1.0 and print the new version", () => {
+test("patch, minor and major each bump all three manifests from 0.1.0 and print the new version", () => {
   for (const [level, expected] of [
     ["patch", "0.1.1"],
     ["minor", "0.2.0"],
     ["major", "1.0.0"],
   ] as const) {
-    const { packageJson, pluginJson } = writeFixtures("0.1.0")
-    const r = bump(level, packageJson, pluginJson)
+    const fixtures = writeFixtures("0.1.0")
+    const { packageJson, pluginJson, codexJson } = fixtures
+    const r = bump(level, fixtures)
     assert.equal(r.status, 0, `${level}: bump failed: ${r.stderr}`)
     assert.equal(r.stdout, `${expected}\n`, `${level}: stdout is exactly the new semver`)
     assert.equal(readFileSync(packageJson, "utf8"), packageJsonText(expected), `${level}: package.json rewritten`)
     assert.equal(readFileSync(pluginJson, "utf8"), pluginJsonText(expected), `${level}: plugin.json rewritten`)
+    assert.equal(readFileSync(codexJson, "utf8"), pluginJsonText(expected), `${level}: Codex manifest rewritten`)
   }
 })
 
-test("disagreeing manifests: exits nonzero, names both files, rewrites nothing", () => {
-  const { packageJson, pluginJson } = writeFixtures("0.1.0", "0.0.9")
-  const before = [readFileSync(packageJson, "utf8"), readFileSync(pluginJson, "utf8")]
-  const r = bump("patch", packageJson, pluginJson)
-  assert.notEqual(r.status, 0, "drift must fail the bump")
-  assert.ok(r.stderr.includes(packageJson), "message names the package manifest")
-  assert.ok(r.stderr.includes(pluginJson), "message names the plugin manifest")
-  assert.equal(readFileSync(packageJson, "utf8"), before[0], "package.json untouched")
-  assert.equal(readFileSync(pluginJson, "utf8"), before[1], "plugin.json untouched")
+test("Claude and Codex version drift each fail the bump without rewriting any manifest", () => {
+  for (const client of ["claude", "codex"] as const) {
+    const fixtures = writeFixtures("0.1.0", { [client]: "0.0.9" })
+    const paths = Object.values(fixtures)
+    const before = paths.map((path) => readFileSync(path, "utf8"))
+    const r = bump("patch", fixtures)
+    assert.notEqual(r.status, 0, "drift must fail the bump")
+    assert.ok(r.stderr.includes(fixtures.packageJson), "message names the package manifest")
+    const mismatched = client === "claude" ? fixtures.pluginJson : fixtures.codexJson
+    assert.ok(r.stderr.includes(mismatched), "message names the mismatched manifest")
+    assert.deepEqual(paths.map((path) => readFileSync(path, "utf8")), before)
+  }
 })
 
 test("an unknown level is rejected with usage before anything runs", () => {
-  const { packageJson, pluginJson } = writeFixtures("0.1.0")
-  const before = [readFileSync(packageJson, "utf8"), readFileSync(pluginJson, "utf8")]
-  const r = bump("premajor", packageJson, pluginJson)
+  const fixtures = writeFixtures("0.1.0")
+  const paths = Object.values(fixtures)
+  const before = paths.map((path) => readFileSync(path, "utf8"))
+  const r = bump("premajor", fixtures)
   assert.notEqual(r.status, 0)
   assert.match(r.stderr, /usage: node scripts\/bump-versions\.mjs/)
-  assert.equal(readFileSync(packageJson, "utf8"), before[0], "package.json untouched")
-  assert.equal(readFileSync(pluginJson, "utf8"), before[1], "plugin.json untouched")
+  assert.deepEqual(paths.map((path) => readFileSync(path, "utf8")), before)
 })

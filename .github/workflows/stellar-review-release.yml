@@ -1,6 +1,6 @@
 # Release pipeline for the stellar-review plugin (npm package
 # `opencode-stellar-review`). One manual dispatch from the Actions tab bumps
-# both manifests in lockstep, gates on both test suites (JS + Python), publishes
+# all three manifests in lockstep, runs the JS and Python tests and a Codex install smoke, publishes
 # to npm with provenance, and only then lands the release on git. npm publish
 # runs before any git push so a failure before it leaves nothing behind
 # (re-dispatch retries cleanly); if the publish itself succeeded but a later
@@ -24,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       level:
-        description: Semver level to bump stellar-review's two manifests by.
+        description: Semver level to bump stellar-review's three manifests by.
         required: true
         default: patch
         type: choice
@@ -69,7 +69,7 @@ jobs:
         # tsx, for `node --import tsx --test` in plugins/stellar-review/ below.
         run: npm ci
 
-      - name: Bump both manifests in lockstep
+      - name: Bump all three manifests in lockstep
         id: bump
         working-directory: plugins/stellar-review
         env:
@@ -92,13 +92,20 @@ jobs:
         working-directory: plugins/stellar-review/skills/stellar-review/tools
         run: python3 -m unittest discover -s tests -v
 
+      - name: Smoke-test the Codex installation
+        run: |
+          npm install --global @openai/codex@0.172.0
+          codex plugin marketplace add "$GITHUB_WORKSPACE"
+          codex plugin add stellar-review@oskars-ai
+          node scripts/smoke-codex.mjs stellar-review
+
       - name: Commit the bump
         env:
           VERSION: ${{ steps.bump.outputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add plugins/stellar-review/package.json plugins/stellar-review/.claude-plugin/plugin.json
+          git add plugins/stellar-review/package.json plugins/stellar-review/.claude-plugin/plugin.json plugins/stellar-review/.codex-plugin/plugin.json
           git commit -m "chore(stellar-review): release ${VERSION}"
 
       - name: Publish to npm

@@ -1,4 +1,4 @@
-# stellar-review — Claude Code + OpenCode plugin
+# Stellar Review for Claude Code, Codex, and OpenCode
 
 Strict maintainability review as a **deterministic pipeline** (ADR-0271 lineage, extracted
 from the [relate](https://github.com/relatedb/relate) repository): scripted facts, a
@@ -50,6 +50,23 @@ claude --plugin-dir ./plugins/stellar-review
 
 The four pass agents register as plugin agents; invoke the skill with
 `/stellar-review` (or ask for a stellar review).
+
+### Codex
+
+```sh
+codex plugin marketplace add oskarhane/oskars.ai
+codex plugin add stellar-review@oskars-ai
+```
+
+Start a new Codex session on the branch you want to review. Invoke `$stellar-review:review` for
+a full round, or `$stellar-review:review --quick` for feedback on the changed units only. Pass a PR
+number to read that PR's ledger. The local round reports findings in the session.
+
+Codex dispatches one subagent per brief and collects their results before updating the local
+ledger. Install the [runtime dependencies](#runtime-dependencies) and [set up the reviewed
+repository](#setting-up-a-new-repository) first. For a Git-backed install, update the marketplace
+with `codex plugin marketplace upgrade oskars-ai` and run `codex plugin add stellar-review@oskars-ai`
+again.
 
 ### OpenCode
 
@@ -131,9 +148,10 @@ directory as canonical.
 
 Releases are dispatched from the GitHub Actions tab, never published by hand: pick the
 **stellar-review release** workflow → **Run workflow** → choose a level. The workflow bumps
-`version` in `package.json` and `.claude-plugin/plugin.json` in lockstep
+`version` in `package.json`, `.claude-plugin/plugin.json`, and `.codex-plugin/plugin.json` in lockstep
 (`scripts/bump-versions.mjs`), runs the test suites (`node --import tsx --test` plus the
-Python `unittest` suite in `skills/stellar-review/tools/tests`), publishes
+Python `unittest` suite in `skills/stellar-review/tools/tests`), checks Codex installation and skill
+discovery, publishes
 `opencode-stellar-review` to npm with provenance (trusted publishing — see the one-time setup
 notes in `.github/workflows/stellar-review-release.yml`), then pushes the release commit and
 tag.

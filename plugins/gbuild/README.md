@@ -233,7 +233,7 @@ hard round cap instead of an open-ended loop.
 
 ## Smoke-test Codex
 
-From the repository root, run `node plugins/gbuild/scripts/smoke-codex.mjs` to check that Codex
+From the repository root, run `node scripts/smoke-codex.mjs gbuild` to check that Codex
 discovers all seven installed skills. Add `--catalog-only` to inspect a local checkout before
 installing it.
 

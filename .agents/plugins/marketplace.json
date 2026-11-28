@@ -12,6 +12,18 @@
         "authentication": "ON_USE"
       },
       "category": "Developer Tools"
+    },
+    {
+      "name": "stellar-review",
+      "source": {
+        "source": "local",
+        "path": "./plugins/stellar-review"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Developer Tools"
     }
   ]
 }
