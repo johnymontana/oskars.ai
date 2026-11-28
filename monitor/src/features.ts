@@ -40,7 +40,7 @@ export async function readFeatureSummary(store: Store): Promise<FeatureSummary> 
 }
 
 export async function listFeatures(config: MonitorConfig): Promise<FeatureSummary[]> {
-  const stores = await discoverStores(config.roots)
+  const stores = await discoverStores(config.roots, config.project)
   const summaries = await Promise.allSettled(stores.map(readFeatureSummary))
   return summaries.flatMap((summary) => (summary.status === "fulfilled" ? [summary.value] : []))
 }

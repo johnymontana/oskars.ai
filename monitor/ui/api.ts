@@ -8,6 +8,8 @@ import type { Knowledge, KnowledgeGraph, KnowledgeGraphNode } from "../src/knowl
 import type { Overview } from "../src/overview.ts"
 import type { StoreGraph, StoreGraphNode, StoreGraphRel } from "../src/storegraph.ts"
 
+import { inSampleWorkspace } from "./routes.ts"
+
 export type { AttentionItem, FeatureSummary, GraphDetail, GraphNode, Knowledge, KnowledgeGraph, KnowledgeGraphNode, StoreGraph, StoreGraphNode, StoreGraphRel }
 
 type StoreMatch = { store_id: string; project: string; slug: string }
@@ -18,8 +20,10 @@ export class AmbiguousStoreError extends Error {
   }
 }
 
+const apiPath = (path: string) => inSampleWorkspace() ? "/sample" + path : path
+
 const get = async <T>(path: string, signal?: AbortSignal): Promise<T> => {
-  const res = await fetch(path, { signal })
+  const res = await fetch(apiPath(path), { signal })
   if (!res.ok) {
     const body = await res.json().catch(() => null) as { error?: string; matches?: StoreMatch[] } | null
     const message = body?.error ?? "GET " + path + " failed: " + res.status
@@ -48,7 +52,7 @@ export interface QueryResult {
 }
 
 export const postQuery = async (storeRef: string, cypher: string, signal?: AbortSignal): Promise<QueryResult> => {
-  const res = await fetch(`/api/features/${encodeURIComponent(storeRef)}/query`, {
+  const res = await fetch(apiPath(`/api/features/${encodeURIComponent(storeRef)}/query`), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ cypher }),

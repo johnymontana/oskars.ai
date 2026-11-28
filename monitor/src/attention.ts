@@ -3,6 +3,7 @@
 // it waits on, and the failed criteria of its latest review.
 import type { MonitorConfig } from "./config.ts"
 import { discoverStores, type Store } from "./discover.ts"
+import { blockedByFailure } from "./failureImpact.ts"
 import { queryStore } from "./query.ts"
 
 // Frontier nodes do not have a dependency to wait on.
@@ -46,34 +47,16 @@ export async function readStoreAttention(store: Store): Promise<AttentionItem[]>
     blocking_failures: [],
     blocked_count: 0,
   }))
-  const dependents = new Map<string, AttentionItem[]>()
-  for (const item of items) {
-    for (const dependency of item.waiting_on) {
-      const waiting = dependents.get(dependency) ?? []
-      waiting.push(item)
-      dependents.set(dependency, waiting)
-    }
-  }
-  for (const failed of items) {
-    if (failed.state !== "failed") continue
-    const visited = new Set<string>([failed.node])
-    const waiting = [...(dependents.get(failed.node) ?? [])]
-    while (waiting.length > 0) {
-      const item = waiting.pop()!
-      if (visited.has(item.node)) continue
-      visited.add(item.node)
-      if (item.state === "blocked") {
-        item.blocking_failures.push(failed.node)
-        failed.blocked_count++
-      }
-      for (const dependent of dependents.get(item.node) ?? []) waiting.push(dependent)
-    }
+  const byNode = new Map(items.map((item) => [item.node, item]))
+  for (const [source, blocked] of blockedByFailure(items)) {
+    byNode.get(source)!.blocked_count = blocked.length
+    for (const node of blocked) byNode.get(node)!.blocking_failures.push(source)
   }
   return items
 }
 
 export async function listAttention(config: MonitorConfig): Promise<AttentionItem[]> {
-  const stores = await discoverStores(config.roots)
+  const stores = await discoverStores(config.roots, config.project)
   const results = await Promise.allSettled(stores.map(readStoreAttention))
   return results.flatMap((result) => (result.status === "fulfilled" ? result.value : []))
 }

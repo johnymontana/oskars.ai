@@ -21,6 +21,7 @@ import { listAttention } from "./attention.ts"
 import { knowledgeGraph, listKnowledge } from "./knowledge.ts"
 import { queryStore, RelateLimitError } from "./query.ts"
 import { listOverview } from "./overview.ts"
+import { createSampleWorkspace } from "./sample.ts"
 
 const send = (res: ServerResponse, status: number, body: unknown) => {
   res.writeHead(status, { "content-type": "application/json" })
@@ -79,8 +80,16 @@ const serveStatic = async (res: ServerResponse, pathname: string): Promise<boole
   }
 }
 
-export async function startServer(configPath: string, options: { host?: string; port?: number } = {}): Promise<Server> {
-  const config: MonitorConfig = await loadConfig(configPath)
+export async function startServer(source: string | MonitorConfig, options: { host?: string; port?: number } = {}): Promise<Server> {
+  const workspace = typeof source === "string" ? await loadConfig(source) : source
+  let sample: ReturnType<typeof createSampleWorkspace> | undefined
+  const sampleConfig = async () => {
+    sample ??= createSampleWorkspace().catch((cause) => {
+      sample = undefined
+      throw cause
+    })
+    return (await sample).config
+  }
   const host = options.host ?? DEFAULT_MONITOR_HOST
   const port = options.port ?? 0
   if (!host.trim()) throw new Error("Host must not be empty")
@@ -88,12 +97,15 @@ export async function startServer(configPath: string, options: { host?: string; 
   const server = createServer({ requestTimeout: 15_000, headersTimeout: 10_000 }, async (req, res) => {
     try {
       const url = new URL(req.url ?? "/", "http://localhost")
-      if (req.method === "GET" && url.pathname === "/api/overview") return send(res, 200, await listOverview(config))
-      if (req.method === "GET" && url.pathname === "/api/features") return send(res, 200, await listFeatures(config))
-      if (req.method === "GET" && url.pathname === "/api/attention") return send(res, 200, await listAttention(config))
-      if (req.method === "GET" && url.pathname === "/api/knowledge") return send(res, 200, await listKnowledge(config))
-      if (req.method === "GET" && url.pathname === "/api/knowledge/graph") return send(res, 200, await knowledgeGraph(config))
-      const match = url.pathname.match(/^\/api\/features\/([^/]+)\/(graph|store-graph|query)$/)
+      const inSample = url.pathname === "/sample" || url.pathname.startsWith("/sample/")
+      const pathname = inSample ? url.pathname.slice("/sample".length) || "/" : url.pathname
+      const config = inSample && pathname.startsWith("/api/") ? await sampleConfig() : workspace
+      if (req.method === "GET" && pathname === "/api/overview") return send(res, 200, await listOverview(config))
+      if (req.method === "GET" && pathname === "/api/features") return send(res, 200, await listFeatures(config))
+      if (req.method === "GET" && pathname === "/api/attention") return send(res, 200, await listAttention(config))
+      if (req.method === "GET" && pathname === "/api/knowledge") return send(res, 200, await listKnowledge(config))
+      if (req.method === "GET" && pathname === "/api/knowledge/graph") return send(res, 200, await knowledgeGraph(config))
+      const match = pathname.match(/^\/api\/features\/([^/]+)\/(graph|store-graph|query)$/)
       if (match) {
         let ref: string
         try {
@@ -102,7 +114,7 @@ export async function startServer(configPath: string, options: { host?: string; 
           return send(res, 400, { error: "Malformed feature reference" })
         }
         const action = match[2] as string
-        const stores = await discoverStores(config.roots)
+        const stores = await discoverStores(config.roots, config.project)
         const byId = stores.find((store) => store.store_id === ref)
         const matches = byId ? [byId] : stores.filter((store) => store.slug === ref)
         if (matches.length > 1) {
@@ -149,11 +161,14 @@ export async function startServer(configPath: string, options: { host?: string; 
           return send(res, 502, { error: `failed to read store for "${store.slug}": ${(cause as Error).message}` })
         }
       }
-      if (req.method === "GET" && !url.pathname.startsWith("/api/") && (await serveStatic(res, url.pathname))) return
-      return send(res, 404, { error: `not found: ${req.method} ${url.pathname}` })
+      if (req.method === "GET" && !pathname.startsWith("/api/") && (await serveStatic(res, pathname))) return
+      return send(res, 404, { error: `not found: ${req.method} ${pathname}` })
     } catch (cause) {
       return send(res, 500, { error: (cause as Error).message })
     }
+  })
+  server.once("close", () => {
+    void sample?.then(({ dispose }) => dispose()).catch(() => {})
   })
   await new Promise<void>((resolvePromise, reject) => {
     const onError = (cause: NodeJS.ErrnoException) => {

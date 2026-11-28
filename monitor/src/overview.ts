@@ -10,10 +10,11 @@ export interface Overview {
   attention: AttentionItem[]
   diagnostics: MonitorDiagnostic[]
   observed_at: string
+  scope: { roots: string[]; project?: string }
 }
 
 export async function listOverview(config: MonitorConfig): Promise<Overview> {
-  const { stores, diagnostics } = await scanStores(config.roots)
+  const { stores, diagnostics } = await scanStores(config.roots, config.project)
   const snapshots = await Promise.all(
     stores.map(async (store) => {
       const { store_id, project, slug } = store
@@ -36,5 +37,6 @@ export async function listOverview(config: MonitorConfig): Promise<Overview> {
     attention: snapshots.flatMap((snapshot) => snapshot.attention),
     diagnostics: diagnostics.concat(snapshots.flatMap((snapshot) => snapshot.diagnostics)),
     observed_at: new Date().toISOString(),
+    scope: { roots: config.roots, project: config.project?.directory },
   }
 }

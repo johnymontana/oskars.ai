@@ -42,7 +42,7 @@ describe("knowledge view", () => {
     assert.ok(filtered.includes("run npm ci at the worktree root"), "matching note stays")
     assert.ok(!filtered.includes("node --test runs the suite"), "non-matching note filters out")
     assert.ok(!filtered.includes("relate must be on PATH"), "non-matching topic note filters out")
-    assert.ok(filtered.includes("no symbols match"), "symbols filter to an empty state")
+    assert.ok(filtered.includes("No symbols match"), "symbols filter to an empty state")
     await unmount()
   })
 

@@ -41,7 +41,7 @@ export interface Knowledge {
 }
 
 export async function listKnowledge(config: MonitorConfig): Promise<Knowledge> {
-  const stores = await discoverStores(config.roots)
+  const stores = await discoverStores(config.roots, config.project)
   const perStore = await Promise.all(
     stores.map(async (store): Promise<Knowledge> => {
       try {

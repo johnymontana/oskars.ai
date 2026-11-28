@@ -67,9 +67,12 @@ export function AttentionView({ pollInterval }: { pollInterval?: number }) {
 
   return (
     <section>
-      <h1>needs attention</h1>
+      <h1>Needs attention</h1>
       <RefreshNotice error={error} diagnostics={data.diagnostics} updatedAt={data.observed_at} />
-      <AttentionTable items={data.attention} incomplete={data.diagnostics.length > 0 || error !== null} />
+      <p className="text-dim">Failures and the tasks waiting on them. Ordinary dependency waits are listed below.</p>
+      <div className="table-scroll">
+        <AttentionTable items={data.attention} incomplete={data.diagnostics.length > 0 || error !== null} />
+      </div>
     </section>
   )
 }

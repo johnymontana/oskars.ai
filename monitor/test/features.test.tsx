@@ -16,16 +16,17 @@ describe("feature list", () => {
       "/repo/project-one",
       "alpha",
       "Alpha feature done.",
-      "completed: 1",
-      "frontier: 1",
+      "Completed: 1",
+      "Ready: 1",
       "/repo/project-two",
       "beta",
-      "in_progress: 1",
+      "In progress: 1",
     ]) {
       assert.ok(text.includes(expected), `feature list should contain ${JSON.stringify(expected)}`)
     }
-    const link = container.querySelector("a[href='#/features/store-alpha']")
-    assert.ok(link, "slug links to the graph detail view")
+    const link = container.querySelector("a[href='#/features/store-alpha/overview']")
+    assert.ok(link, "slug links to the feature overview")
+    assert.match(container.querySelector("details")?.textContent ?? "", /Where the monitor looks\/repo/)
     await unmount()
   })
 
@@ -50,22 +51,42 @@ describe("feature list", () => {
     }
   })
 
-  test("tops the landing with a needs-attention section linking to each feature", async () => {
+  test("shows features before a compact attention summary with direct failure links", async () => {
     const { container, unmount } = await render(<FeatureList pollInterval={60_000} />)
     const text = container.textContent ?? ""
-    for (const expected of ["needs attention", "b-use", "failed", "uses the value", "c-wire", "blocked", "b-prep"]) {
+    for (const expected of ["Needs attention", "b-use", "1 failure", "1 waiting on failures", "1 waiting on other tasks"]) {
       assert.ok(text.includes(expected), `needs-attention section should contain ${JSON.stringify(expected)}`)
     }
     assert.ok(
-      text.indexOf("needs attention") < text.indexOf("gbuild features"),
-      "the needs-attention section renders above the feature list",
+      text.indexOf("Alpha feature done.") < text.indexOf("Needs attention"),
+      "a feature can be selected before reading the attention summary",
     )
-    const section = container.querySelector("section")
+    const section = container.querySelector("section[aria-labelledby='attention-summary']")
     assert.ok(section?.querySelector("a[href='#/features/store-alpha?node=b-use']"), "attention item opens the failed alpha node")
-    assert.ok(section?.querySelector("a[href='#/features/store-beta?node=c-wire']"), "attention item opens the blocked beta node")
-    assert.ok(section?.querySelector(".status-chip[data-status='failed']"), "failed state uses the status chip")
-    assert.ok(section?.querySelector(".status-chip[data-status='blocked']"), "blocked state uses the status chip")
+    assert.ok(section?.querySelector("a[href='#/attention']"), "the full list remains accessible")
+    assert.doesNotMatch(section?.textContent ?? "", /c-wire|d-dependent/)
     await unmount()
+  })
+
+  test("provides a launch command, scoped guidance, or path recovery for the three empty states", async (t) => {
+    const empty = { ...OVERVIEW, features: [], attention: [] }
+    let response: unknown = { ...empty, scope: { roots: [] } }
+    t.mock.method(globalThis, "fetch", async () => Response.json(response))
+    const cases = [
+      [response, /Choose a project or try a sample.*--project \/path\/to\/checkout/s],
+      [{ ...empty, scope: { roots: [], project: "/repo/empty" } }, /No gbuild runs found yet.*gbuild plan skill/s],
+      [{ ...empty, diagnostics: [{ root: "/missing", message: "Could not scan root" }] }, /\/missing.*Check the project paths.*corrected config/s],
+    ] as const
+    for (const [snapshot, expected] of cases) {
+      response = snapshot
+      const { container, unmount } = await render(<FeatureList pollInterval={60_000} />)
+      try {
+        assert.match(container.textContent ?? "", expected)
+        assert.ok(container.querySelector("a[href='/sample/']"))
+      } finally {
+        await unmount()
+      }
+    }
   })
 
   test("keeps the last snapshot when refresh fails and identifies partial data", async (t) => {

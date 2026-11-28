@@ -4,14 +4,15 @@
 // through the relate CLI. Skips when relate is not on PATH. Run from the repo
 // root:  node --import tsx --test monitor/test/server.test.ts
 import assert from "node:assert/strict"
-import { spawnSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { after, before, describe, test } from "node:test"
 import { fileURLToPath } from "node:url"
-import { loadConfig } from "../src/config.ts"
+import { loadConfig, loadProjectConfig } from "../src/config.ts"
 import { scanStores } from "../src/discover.ts"
+import { listOverview } from "../src/overview.ts"
 import { startServer } from "../src/server.ts"
 import { storeGraph } from "../src/storegraph.ts"
 import type { Server } from "node:http"
@@ -93,6 +94,18 @@ CREATE (t)-[:REVIEWED]->(:Review {attempt: 2, verdict: 'fail', failed_criteria: 
 .commit
 `
 
+test("startup explains how to install Relate when it is missing", () => {
+  const entry = fileURLToPath(new URL("../index.ts", import.meta.url))
+  const result = spawnSync(process.execPath, ["--import", "tsx", entry], {
+    cwd: fileURLToPath(new URL("../..", import.meta.url)),
+    env: { ...process.env, PATH: "" },
+    encoding: "utf8",
+  })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /Install Relate 1\.0\.1 or newer from https:\/\/relatedb\.ai/)
+  assert.doesNotMatch(result.stdout, /listening/)
+})
+
 describe("monitor server", { skip: !hasRelate }, () => {
   let root: string
   let configPath: string
@@ -146,6 +159,61 @@ describe("monitor server", { skip: !hasRelate }, () => {
     assert.equal(address.address, "127.0.0.1")
     assert.ok(address.port > 0)
     await assert.rejects(startServer(configPath, { port: address.port }), /address already in use; choose another port/)
+  })
+
+  test("project mode reads the common store from both a checkout and its linked worktree", async (t) => {
+    const workspace = mkdtempSync(join(tmpdir(), "gbuild-monitor-project-"))
+    t.after(() => rmSync(workspace, { recursive: true, force: true }))
+    const checkout = join(workspace, "checkout")
+    const worktree = join(workspace, "worktree")
+    const sibling = join(workspace, "unrelated")
+    execFileSync("git", ["init", "-q", "-b", "main", checkout])
+    execFileSync("git", ["-C", checkout, "-c", "user.name=Monitor Test", "-c", "user.email=test@example.invalid",
+      "commit", "--quiet", "--allow-empty", "--no-gpg-sign", "-m", "Initialize fixture"])
+    execFileSync("git", ["-C", checkout, "worktree", "add", "--quiet", "--detach", worktree])
+    const project = await loadProjectConfig(".", worktree)
+    const empty = await listOverview(project)
+    assert.deepEqual(empty.features, [])
+    assert.deepEqual(empty.diagnostics, [])
+    assert.match(empty.scope.project ?? "", /\/worktree$/)
+    buildStore(checkout, "alpha", ALPHA)
+    buildStore(sibling, "beta", BETA)
+    const primary = await listOverview(await loadProjectConfig(checkout))
+    const linked = await listOverview(project)
+    assert.deepEqual(linked.features.map(({ slug }) => slug), ["alpha"])
+    assert.equal(linked.features[0]?.store_id, primary.features[0]?.store_id)
+    await assert.rejects(loadProjectConfig(join(workspace, "missing")), /Pass the path to a checkout or linked worktree/)
+  })
+
+  test("uses an isolated Relate store for the sample and serves regular read-only views", async () => {
+    const { status, body } = await get("/sample/api/overview")
+    assert.equal(status, 200)
+    assert.deepEqual(body.diagnostics, [])
+    assert.deepEqual(body.scope, { roots: [], project: "Sample workspace" })
+    assert.equal(body.features.length, 1)
+    const [sample] = body.features
+    assert.deepEqual(sample.status_counts, { completed: 1, frontier: 1, failed: 1, blocked: 1 })
+    assert.equal(body.attention.find((item: { state: string }) => item.state === "failed").blocked_count, 1)
+    const feature = `/sample/api/features/${sample.store_id}`
+    const graph = await get(`${feature}/graph`)
+    assert.equal(graph.status, 200)
+    const failure = graph.body.nodes.find((node: { status: string }) => node.status === "failed")
+    assert.match(failure.reviews[0].failed_criteria[0], /outdated page address/)
+    const query = await post(`${feature}/query`, { cypher: "MATCH (n:GbuildNode) RETURN n.slug AS slug ORDER BY slug" })
+    assert.equal(query.status, 200)
+    assert.deepEqual(query.body.rows.map(({ slug }: { slug: string }) => slug), [
+      "check-navigation", "check-page-titles", "draft-the-pages", "publish-the-site",
+    ])
+    const validation = await post(`${feature}/query`, {
+      cypher: readFileSync(new URL("../../plugins/gbuild/cypher/validate.cypher", import.meta.url), "utf8"),
+    })
+    assert.equal(validation.status, 200)
+    assert.deepEqual(validation.body.rows, [])
+    assert.equal((await post(`${feature}/query`, { cypher: "CREATE (:Note {topic: 'write'})" })).status, 400)
+    assert.ok((await get("/sample/api/knowledge")).body.notes.length > 0)
+    assert.equal((await get(`/api/features/${sample.store_id}/graph`)).status, 404)
+    assert.equal((await get("/sample/api/features/alpha/graph")).status, 404)
+    assert.deepEqual((await get("/api/features")).body.map(({ slug }: { slug: string }) => slug), ["alpha", "beta"])
   })
 
   test("store identity survives scan aliases and separates duplicate feature slugs", async (t) => {

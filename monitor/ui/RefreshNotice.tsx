@@ -26,7 +26,7 @@ export function RefreshNotice({
           </ul>
         </>
       )}
-      {updatedAt && <p>Last successful refresh <time dateTime={updatedAt}>{new Date(updatedAt).toLocaleString()}</time></p>}
+      {updatedAt && <p>{diagnostics.length ? "Available data captured" : "Last successful refresh"} <time dateTime={updatedAt}>{new Date(updatedAt).toLocaleString()}</time></p>}
     </div>
   )
 }

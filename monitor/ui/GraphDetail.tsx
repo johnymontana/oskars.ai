@@ -13,6 +13,7 @@ import type NVL from "@neo4j-nvl/base"
 import type { GraphNode } from "../src/graph.ts"
 import { AcceptanceTab } from "./AcceptanceTab.tsx"
 import { AmbiguousStoreError, fetchGraph, fetchKnowledge, fetchStoreGraph } from "./api.ts"
+import { FeatureOverview } from "./FeatureOverview.tsx"
 import { ElementPanel } from "./ElementPanel.tsx"
 import { NodePanel } from "./NodePanel.tsx"
 import { QueryTab } from "./QueryTab.tsx"
@@ -25,10 +26,11 @@ import { TimelineTab } from "./TimelineTab.tsx"
 import { usePoll } from "./usePoll.ts"
 
 const TABS: { id: FeatureTab; label: string }[] = [
+  { id: "overview", label: "Overview" },
   { id: "graph", label: "Graph" },
   { id: "timeline", label: "Timeline" },
   { id: "acceptance", label: "Acceptance" },
-  { id: "repairs", label: "Repairs" },
+  { id: "repairs", label: "Review history" },
   { id: "query", label: "Query" },
 ]
 
@@ -173,6 +175,9 @@ export function GraphDetail({
     <section ref={featureSection}>
       <h1>{data.slug}</h1>
       <RefreshNotice error={error} updatedAt={updatedAt} />
+      {!error && updatedAt && (
+        <p className="text-dim">Last refreshed <time dateTime={updatedAt}>{new Date(updatedAt).toLocaleTimeString()}</time></p>
+      )}
       <p>
         <span className="mono">{data.project}</span> — {data.destination}
       </p>
@@ -186,7 +191,9 @@ export function GraphDetail({
           </a>
         ))}
       </nav>
-      {tab === "timeline" ? (
+      {tab === "overview" ? (
+        <FeatureOverview data={data} />
+      ) : tab === "timeline" ? (
         <TimelineTab nodes={data.nodes} />
       ) : tab === "acceptance" ? (
         <AcceptanceTab acceptance={data.acceptance} nodes={data.nodes} />
@@ -196,6 +203,9 @@ export function GraphDetail({
         <QueryTab key={data.store_id} storeId={data.store_id} project={data.project} feature={data.slug} />
       ) : (
         <>
+          {data.nodes.length > 0
+            ? <p className="text-dim">Waves group tasks by dependency depth. Search for a task or relationship to inspect it.</p>
+            : <p className="state state-empty">This feature has no planned tasks. The graph shows tasks as they are added.</p>}
           <RefreshNotice error={storeError} updatedAt={storeUpdatedAt} />
           {!storeData ? (
             !storeError && <p className="state state-loading">loading…</p>

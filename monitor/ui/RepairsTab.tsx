@@ -6,7 +6,7 @@ import { StatusChip } from "./StatusChip.tsx"
 
 export function RepairsTab({ nodes }: { nodes: GraphNode[] }) {
   const reviewed = nodes.filter((n) => n.reviews.length > 0)
-  if (reviewed.length === 0) return <p className="state state-empty">no review attempts yet</p>
+  if (reviewed.length === 0) return <p className="state state-empty">No reviews recorded yet. The latest verdict and evidence will appear here after a task is reviewed.</p>
   return (
     <div className="repairs-list">
       {reviewed.map((n) => (

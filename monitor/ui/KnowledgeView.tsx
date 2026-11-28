@@ -68,9 +68,11 @@ export function KnowledgeView({ pollInterval }: { pollInterval?: number }) {
   if (!data) return error
     ? <RefreshNotice error={error} updatedAt={updatedAt} />
     : <p className="state state-loading">loading…</p>
+  const hasRecords = data.notes.length > 0 || data.symbols.length > 0
   return (
     <section>
-      <h1>knowledge</h1>
+      <h1>Knowledge</h1>
+      <p className="text-dim">Notes and reusable code symbols recorded by gbuild agents across the projects in view.</p>
       <RefreshNotice error={error} updatedAt={updatedAt} />
       <RefreshNotice error={graphError} updatedAt={graphUpdatedAt} />
       {nvlGraph && nvlGraph.nodes.length > 0 && (
@@ -89,7 +91,7 @@ export function KnowledgeView({ pollInterval }: { pollInterval?: number }) {
           }}
         />
       )}
-      <p>
+      {hasRecords && <p>
         <input
           type="search"
           placeholder="filter notes and symbols…"
@@ -97,10 +99,12 @@ export function KnowledgeView({ pollInterval }: { pollInterval?: number }) {
           onChange={(event) => setFilter(event.target.value)}
           aria-label="filter knowledge"
         />
-      </p>
+      </p>}
       <h2>notes</h2>
       {notesByTopic.length === 0 ? (
-        <p className="state state-empty">no notes match</p>
+        <p className="state state-empty">
+          {data.notes.length === 0 ? "No notes have been recorded yet." : "No notes match this filter."}
+        </p>
       ) : (
         notesByTopic.map(([topic, notes]) => (
           <section key={topic}>
@@ -120,7 +124,9 @@ export function KnowledgeView({ pollInterval }: { pollInterval?: number }) {
       )}
       <h2>symbols</h2>
       {symbols.length === 0 ? (
-        <p className="state state-empty">no symbols match</p>
+        <p className="state state-empty">
+          {data.symbols.length === 0 ? "No symbols have been recorded yet." : "No symbols match this filter."}
+        </p>
       ) : (
         <table>
           <thead>

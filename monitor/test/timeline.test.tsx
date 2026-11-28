@@ -55,7 +55,7 @@ describe("timeline tab", () => {
     ] as any
     const { container, unmount } = await render(<TimelineTab nodes={nodes} />)
     assert.equal(container.querySelectorAll(".timeline-bar").length, 0)
-    assert.match(container.textContent ?? "", /Running · start time unavailable: legacy-running/)
+    assert.match(container.textContent ?? "", /Store reports in progress · start time unavailable: legacy-running/)
     assert.match(container.textContent ?? "", /Queued · waiting for worker start signal: claimed-worker/)
     assert.match(container.textContent ?? "", /not started: pending/)
     await unmount()

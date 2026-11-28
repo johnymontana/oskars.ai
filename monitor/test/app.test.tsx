@@ -5,7 +5,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { describe, test } from "node:test"
 import { dom } from "./setup.ts"
-import { GRAPH } from "./fixtures.ts"
+import { GRAPH, OVERVIEW } from "./fixtures.ts"
 import { act, render } from "./helpers.tsx"
 
 const { App } = await import("../ui/App.tsx")
@@ -42,9 +42,9 @@ describe("app shell", () => {
     const header = container.querySelector("header.app-header")
     assert.ok(header, "app renders a header")
     for (const [href, label] of [
-      ["#/", "features"],
-      ["#/attention", "attention"],
-      ["#/knowledge", "knowledge"],
+      ["#/", "Features"],
+      ["#/attention", "Attention"],
+      ["#/knowledge", "Knowledge"],
     ] as const) {
       const link: Element | null = header.querySelector(`nav a[href='${href}']`)
       assert.ok(link, `header nav links to ${href}`)
@@ -67,10 +67,40 @@ describe("app shell", () => {
     assert.ok(container.querySelector("input[type='search']"), "#/knowledge renders the knowledge view")
     await goto("#/")
     assert.ok((container.textContent ?? "").includes("gbuild features"), "#/ renders the feature list")
+    const overview = container.querySelector("a[href='#/features/store-alpha/overview']")
+    assert.ok(overview)
+    await goto(overview.getAttribute("href")!)
+    assert.match(container.textContent ?? "", /Progress.*Completed: 1.*Ready: 1.*Ready to run/s)
+    assert.equal(container.querySelector("a[href='#/features/store-alpha?node=b-use']")?.textContent, "Use alpha value")
     await goto("#/features/alpha")
     assert.ok((container.textContent ?? "").includes("wave 0"), "#/features/<slug> still renders the graph detail")
     await unmount()
     window.location.hash = ""
+  })
+
+  test("sample navigation keeps feature requests in the sample workspace", async (t) => {
+    window.history.replaceState(null, "", "/sample/#/")
+    const fetch = t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL) => {
+      if (String(input) === "/sample/api/overview") return Response.json(OVERVIEW)
+      if (String(input) === "/sample/api/features/store-alpha/graph") return Response.json(GRAPH)
+      throw new Error(`Unexpected API request ${input}`)
+    })
+    const { container, unmount } = await render(<App pollInterval={60_000} />)
+    t.after(async () => {
+      await unmount()
+      window.history.replaceState(null, "", "/#/")
+    })
+    assert.equal(container.querySelector("aside[aria-label='Sample workspace'] a")?.getAttribute("href"), "/")
+    const link = container.querySelector("a[href='#/features/store-alpha/overview']")
+    assert.ok(link)
+    await act(async () => {
+      window.history.replaceState(null, "", link.getAttribute("href"))
+      window.dispatchEvent(new dom.window.Event("hashchange"))
+    })
+    assert.match(container.textContent ?? "", /Progress/)
+    assert.deepEqual(fetch.mock.calls.map(({ arguments: [path] }) => path), [
+      "/sample/api/overview", "/sample/api/features/store-alpha/graph",
+    ])
   })
 
   test("opens the intended node from an attention deep link on the first render", async (t) => {

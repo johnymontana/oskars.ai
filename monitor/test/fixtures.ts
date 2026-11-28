@@ -108,6 +108,7 @@ export const OVERVIEW = {
   attention: ATTENTION,
   diagnostics: [],
   observed_at: "2026-01-01T00:13:05Z",
+  scope: { roots: ["/repo"] },
 }
 
 export const KNOWLEDGE = {

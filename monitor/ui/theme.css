@@ -503,3 +503,74 @@ article h3 {
   background: var(--bg-raised);
   border: 1px solid var(--status-failed);
 }
+
+/* First-run guidance and the feature overview */
+.app-header,
+.tab-bar {
+  flex-wrap: wrap;
+}
+
+.sample-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  padding: 0.5rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.sample-banner a {
+  margin-left: auto;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.feature-project,
+.onboarding-command {
+  overflow-wrap: anywhere;
+}
+
+.feature-project {
+  max-width: 20rem;
+}
+
+.onboarding-command {
+  white-space: pre-wrap;
+  padding: 0.6rem 0.8rem;
+  background: var(--bg-inset);
+}
+
+.onboarding-panel {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 1rem 0;
+}
+
+.onboarding-panel h2 {
+  margin-top: 0;
+}
+
+.monitor-action {
+  display: inline-block;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 0.25rem 0.6rem;
+  color: var(--accent);
+  background: var(--bg-inset);
+  font: inherit;
+  cursor: pointer;
+}
+
+.scan-details,
+.attention-shortlist {
+  margin: 0.5rem 0;
+}
+
+.feature-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}

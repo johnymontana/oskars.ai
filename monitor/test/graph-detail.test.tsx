@@ -12,11 +12,12 @@ const { GraphDetail } = await import("../ui/GraphDetail.tsx")
 const { App } = await import("../ui/App.tsx")
 
 describe("graph detail", () => {
-  test("compact wave list opens the side panel with full node detail, Esc closes it", async () => {
+  test("compact wave list opens the side panel with full node detail, Esc closes it", async (t) => {
     const { container, unmount } = await render(<GraphDetail slug="alpha" pollInterval={60_000} />)
+    t.after(unmount)
     const text = container.textContent ?? ""
     // The wave-grouped list is a compact summary: name + status chip only.
-    for (const expected of ["wave 0", "a-impl", "completed", "wave 1", "b-use", "frontier"]) {
+    for (const expected of ["wave 0", "a-impl", "Completed", "wave 1", "b-use", "Ready"]) {
       assert.ok(text.includes(expected), `graph detail should contain ${JSON.stringify(expected)}`)
     }
     assert.ok(!text.includes("alpha implemented"), "acceptance detail lives in the side panel, not the wave list")
@@ -69,7 +70,6 @@ describe("graph detail", () => {
     for (const expected of ["uses the value", "a-impl.output.value", "result", "standard", "halt"]) {
       assert.ok(panelText2.includes(expected), `side panel should contain ${JSON.stringify(expected)}`)
     }
-    await unmount()
   })
 
   test("graph tab: double-clicking a node dims elements outside its transitive neighborhood, Esc or canvas double-click resets", async () => {
@@ -123,12 +123,13 @@ describe("graph detail", () => {
     }
     const currentTab = () => container.querySelector(".tab-bar a[aria-current='page']")?.textContent
 
-    // The graph tab is the default; the tab bar links to all four tabs.
+    // The graph stays the default for old links; the tab bar exposes the other views.
     await goto("#/features/alpha")
     const tabBar = container.querySelector(".tab-bar")
     assert.ok(tabBar, "feature detail renders a tab bar")
     for (const href of [
       "#/features/store-alpha",
+      "#/features/store-alpha/overview",
       "#/features/store-alpha/timeline",
       "#/features/store-alpha/acceptance",
       "#/features/store-alpha/repairs",
@@ -159,9 +160,9 @@ describe("graph detail", () => {
     assert.ok(list?.querySelector(".status-chip[data-status='completed']"), "covered-by chip carries the node status")
     assert.ok(list?.querySelector(".status-chip[data-status='frontier']"), "frontier covering node gets its chip color")
 
-    // Repairs tab: per-node review attempts with failed criteria and checklist lines.
+    // Review history keeps the existing repairs route.
     await goto("#/features/alpha/repairs")
-    assert.equal(currentTab(), "Repairs")
+    assert.equal(currentTab(), "Review history")
     const repairsText = container.textContent ?? ""
     for (const expected of [
       "a-impl",

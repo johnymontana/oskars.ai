@@ -55,7 +55,7 @@ export function TimelineTab({ nodes }: { nodes: GraphNode[] }) {
   const first = rows[0]?.start ?? 0
   const last = rows.reduce((max, row) => Math.max(max, row.end), first)
   const span = Math.max(last - first, 1)
-  if (!nodes.length) return <p className="state state-empty">no nodes have started yet</p>
+  if (!nodes.length) return <p className="state state-empty">This feature has no tasks with timing data yet.</p>
 
   return (
     <div className="timeline">
@@ -88,7 +88,7 @@ export function TimelineTab({ nodes }: { nodes: GraphNode[] }) {
       })}
       {running.length > 0 && (
         <p className="text-dim">
-          Running · start time unavailable: <span className="mono">{running.join(", ")}</span>
+          Store reports in progress · start time unavailable: <span className="mono">{running.join(", ")}</span>
         </p>
       )}
       {queued.length > 0 && (
