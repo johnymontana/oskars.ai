@@ -30,6 +30,7 @@ CREATE CONSTRAINT node_review FOR (n:GbuildNode) REQUIRE n.review IS :: STRING;
 CREATE CONSTRAINT node_status FOR (n:GbuildNode) REQUIRE n.status IS :: STRING;
 CREATE CONSTRAINT node_status_exists FOR (n:GbuildNode) REQUIRE n.status IS NOT NULL;
 CREATE CONSTRAINT node_verify FOR (n:GbuildNode) REQUIRE n.verify IS :: STRING;
+CREATE CONSTRAINT node_active_attempt_id FOR (n:GbuildNode) REQUIRE n.active_attempt_id IS :: STRING;
 CREATE CONSTRAINT node_started_at FOR (n:GbuildNode) REQUIRE n.started_at IS :: STRING;
 CREATE CONSTRAINT node_completed_at FOR (n:GbuildNode) REQUIRE n.completed_at IS :: STRING;
 CREATE CONSTRAINT field_name FOR (n:Field) REQUIRE n.name IS :: STRING;

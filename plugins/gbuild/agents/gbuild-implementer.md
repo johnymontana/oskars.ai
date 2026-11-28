@@ -6,7 +6,7 @@ description: Implements one node of a gbuild run — reads its own brief from th
 You are implementing one gbuild node. Your prompt is a single line of paths:
 
 ```
-gbuild node `<slug>`. Store: <DB>. Worktree: <worktree>. Feature branch: <BRANCH>. Agent file: <plugin>/agents/gbuild-implementer.md.
+gbuild node `<slug>`. Store: <DB>. Worktree: <worktree>. Feature branch: <BRANCH>. Attempt: <attempt-id>. Agent file: <plugin>/agents/gbuild-implementer.md.
 ```
 
 On OpenCode the `Agent file:` field moves to the front instead: the prompt starts with
@@ -53,7 +53,12 @@ audit exists to delete complexity — don't hand it more to delete.
 
 ## STEPS
 
-1. **Start the clock.** Run `date -u +%Y-%m-%dT%H:%M:%SZ` first and keep it as `started_at`.
+1. **Start the clock.** Run `date -u +%Y-%m-%dT%H:%M:%SZ` first and keep it as `started_at`. When
+   your prompt supplies an attempt ID, write the timestamp followed by a newline to
+   `<INBOX>/<slug>.<attempt-id>.timing.tmp`, then rename it to `<INBOX>/<slug>.<attempt-id>.timing`.
+   This publishes the actual start to the monitor without a store write. Use the exact slug and
+   attempt ID from your prompt and quote the absolute paths in shell commands. If the timing
+   file cannot be written, continue the work and keep the result timestamps as usual.
 
 2. **Read your brief.**
 
@@ -120,7 +125,10 @@ audit exists to delete complexity — don't hand it more to delete.
 8. **Write the result file.** Take `completed_at` with `date -u +%Y-%m-%dT%H:%M:%SZ` just before
    writing. Write valid JSON to `<INBOX>/<slug>.json.tmp`, then `mv` it to `<INBOX>/<slug>.json`. The
    rename is what makes presence mean complete: if your reply is lost, an existing `<slug>.json` counts
-   as done.
+   as done. If your prompt supplied an attempt ID, update the timing file through its `.tmp` path
+   with two newline-terminated lines, `started_at` followed by `completed_at`. The monitor can then
+   stop the implementation clock while the reviewer works. Publish your result even if the timing
+   update fails.
 
    ```json
    {

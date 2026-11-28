@@ -6,11 +6,12 @@
 // call. No rows = nothing newly ready (ask progress.cypher / attention.cypher
 // whether the graph is done or stuck). `review` routes the gate: 'reviewer'
 // dispatches a gbuild-reviewer, 'mechanical' records on check-result alone
-// (unset means 'reviewer').
+// (unset means 'reviewer'). A fresh attempt_id scopes the worker's timing file.
 //   relate query --database <git-common-dir>/gbuild/<slug>/db --mode jsonl < cypher/dispatch.cypher
 MATCH (n:GbuildNode {status: 'pending'})
 WHERE NOT EXISTS { MATCH (n)-[:DEPENDS_ON]->(d:GbuildNode) WHERE NOT d.status IN ['completed', 'cancelled'] }
-SET n.status = 'in_progress'
+SET n.status = 'in_progress', n.active_attempt_id = randomUUID()
 RETURN n.slug AS slug, n.type AS type, n.model_tier AS model_tier,
-       n.failure_policy AS failure_policy, coalesce(n.review, 'reviewer') AS review
+       n.failure_policy AS failure_policy, coalesce(n.review, 'reviewer') AS review,
+       n.active_attempt_id AS attempt_id
 ORDER BY slug;

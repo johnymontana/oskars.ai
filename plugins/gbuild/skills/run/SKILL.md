@@ -14,7 +14,7 @@ this skill passes them slugs and paths, reads their one-line replies, and record
 
 - `relate --version` first. If it's missing or older than 1.0.1, stop: gbuild needs it
   (`curl -sSfL https://relatedb.ai/install.sh | bash`, or `relate upgrade`).
-- You are the only writer: `dispatch`, `set-status` and `record` run only here, one `relate` command
+- You are the only writer: `dispatch`, `retry-attempt`, `set-status` and `record` run here, one `relate` command
   at a time against `DB` — never parallel tool calls on it. Subagents may run `relate` only with
   `--read-only` (a read opens beside the writer); their agent files say what they read.
 - Always `--mode jsonl`, never `--timings`: one JSON object per row and nothing else — N rows print
@@ -22,7 +22,7 @@ this skill passes them slugs and paths, reads their one-line replies, and record
   per-statement telemetry line that is not a row). Every `--param` value is JSON,
   single-quoted for the shell (`--param 'slugs=["a","b"]'`); write a `'` inside it as `\u0027`.
 - Pure reads (validate, attention, progress below) open the store `--read-only`; the writes
-  (dispatch, set-status, record) stay writable — the CLI checkpoints a writable store on exit itself.
+  (dispatch, retry-attempt, set-status, record) stay writable — the CLI checkpoints a writable store on exit itself.
 - `storage locked` (exit 5) → another writer holds the store: wait a few seconds, retry up to 3 times,
   then stop. Exit code 1 = failure; read stderr. Anything beyond the scripts below:
   `${CLAUDE_PLUGIN_ROOT}/reference/cypher.md`.
@@ -57,8 +57,9 @@ Default to `git`. Resolve these facts first, absolute paths, and reuse them thro
 - `DB` = `WT/db` — the feature's store, beside the worktree: machine-local, never committed (a gbuild ≤ 0.7.1
   store needs the move in `${CLAUDE_PLUGIN_ROOT}/reference/cypher.md`).
 - `INBOX` = `WT/inbox` — beside `DB`, outside every worktree: each implementer writes `<slug>.json`
-  there and each reviewer `<slug>.review.json` when it fails (a pass writes none); only
-  `record.cypher` reads them, on your behalf.
+  there and each reviewer `<slug>.review.json` when it fails (a pass writes none). `record.cypher`
+  reads those files on your behalf. Workers also publish the timestamps for their attempt in
+  `<slug>.<attempt-id>.timing` so the monitor can track it while it runs.
 
 Then check and recover:
 
@@ -128,7 +129,7 @@ one reviewer for several nodes.
 
    It moves every pending node whose dependencies are all completed or cancelled to `in_progress` and
    prints one routing row per claimed node: `slug`, `type`, `model_tier`, `failure_policy`, `review`
-   (`reviewer` when unset). That is all you need — agents read the rest themselves. **No rows** →
+   (`reviewer` when unset) and `attempt_id`. That is all you need — agents read the rest themselves. **No rows** →
    nothing newly ready (step 3).
 
 2. **IMPLEMENT.** A `code`/`test`/`chore` node first gets its own worktree (`research`/`decision`/`verify`
@@ -153,6 +154,9 @@ one reviewer for several nodes.
    gbuild node `<slug>`. Store: <DB>. Worktree: <worktree>. Feature branch: <BRANCH>. Agent file: ${CLAUDE_PLUGIN_ROOT}/agents/gbuild-<implementer|reviewer>.md.
    ```
 
+   For an implementer only, insert `Attempt: <attempt-id>.` before `Agent file:` using the exact ID
+   returned by claim (or step 2.6 for retries and fallbacks). Pass no attempt ID to a reviewer.
+
    A step-2.3 review batch dispatches one reviewer with several of these lines, one per node — same
    format, nothing else appended. `<DB>`, `<BRANCH>` are `DB`, `BRANCH`; `<implementer|reviewer>` names
    the agent; `<worktree>` is the node's worktree for `code`/`test`/`chore` and `FT` (read-only)
@@ -160,7 +164,8 @@ one reviewer for several nodes.
    per the same tier where the harness offers one
    (`${CLAUDE_PLUGIN_ROOT}/reference/cost-model.md`).
    Append nothing — no acceptance, inputs, outputs, notes, failed criteria or agent-file text. Retries,
-   repairs and fallbacks use the same prompt: the agent's brief carries the failed criteria.
+   repairs and fallbacks use the same prompt format with a fresh attempt ID. The agent's brief carries
+   the failed criteria.
 
 3. **REVIEW — a fresh reviewer, or no reviewer at all.** The implementer replies with one line; read
    nothing else:
@@ -241,8 +246,18 @@ one reviewer for several nodes.
      because `missing_outputs` is non-empty) → step 2.6.
 
 6. **FAILURES.** Apply the node's `failure_policy` (`${CLAUDE_PLUGIN_ROOT}/reference/failure-policies.md`),
-   using its `attempt` as the count:
-   - `retry` / `repair` → back to step 2.2 with the same prompt, reusing the node's existing worktree
+   using its `attempt` as the count. Before re-dispatching an implementation under `retry`, `repair`
+   or `fallback`, allocate its fresh attempt ID with this serialized store write:
+
+   ```
+   relate query --database DB --mode jsonl --param 'slug="<slug>"' \
+     < ${CLAUDE_PLUGIN_ROOT}/cypher/retry-attempt.cypher
+   ```
+
+   Pass the returned `attempt_id` to step 2.2. An empty response means the node is no longer between
+   attempts; inspect its state before attempting another dispatch.
+
+   - `retry` / `repair` → back to step 2.2 with the fresh attempt ID, reusing the node's existing worktree
      and branch — the next attempt builds on them, it does not start over. Bounded: 2 attempts.
    - `fallback` → remove the failed attempt's worktree and branch first (`git worktree remove --force`,
      `git branch -D`), then step 2.2 — a fresh branch off `BRANCH`; the brief names the alternate

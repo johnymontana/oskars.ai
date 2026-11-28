@@ -21,7 +21,7 @@ the script catalog) is in `reference/cypher.md`.
     manifest.json     engine files
     wal/
     .cypherlite.lock
-  inbox/              run's hand-off files: <slug>.json (implementer result), <slug>.review.json (reviewer checklist, written on a fail only)
+  inbox/              run's hand-off files: <slug>.json (implementer result), <slug>.<attempt-id>.timing (worker timestamps), <slug>.review.json (reviewer checklist, written on a fail only)
   tree/               the feature worktree
   <slug>/             a file-touching node's worktree, during run
 ```
@@ -88,6 +88,7 @@ universal label is for `MATCH (n:GbuildNode)`; the type label enables `MATCH (n:
 | `model_tier`     | string         | `cheap \| strong` — `reference/cost-model.md`                   |
 | `review`         | string, optional | `reviewer \| mechanical`, unset = `reviewer` — `reference/cost-model.md`: `reviewer` gets a fresh `gbuild-reviewer` gate; `mechanical` records on `check-result.cypher` alone |
 | `status`         | string         | `pending` at creation — see [Status lifecycle](#status-lifecycle) |
+| `active_attempt_id` | string, optional | ID of the active implementation attempt. Claim and retry allocate an ID, and a verdict or status reset clears it. |
 | `started_at`     | string, optional | implementing agent's own UTC start time, set on completion    |
 | `completed_at`   | string, optional | implementing agent's own UTC finish time, set on completion   |
 

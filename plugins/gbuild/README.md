@@ -196,9 +196,9 @@ hard round cap instead of an open-ended loop.
 
 ## How agents get their context
 
-`run` passes references, not content. A dispatch prompt is one line, the same for implementer and
-reviewer, and each agent reads the rest itself (the inbox is always the `inbox/` directory beside the
-store):
+`run` passes references in a one-line prompt. Implementers also receive an `Attempt: <attempt-id>.`
+field before `Agent file:` so that their live timing can be matched to the current claim. The inbox
+is the `inbox/` directory beside the store:
 
 ```
 gbuild node `<slug>`. Store: <DB>. Worktree: <worktree>. Feature branch: <BRANCH>. Agent file: ${CLAUDE_PLUGIN_ROOT}/agents/gbuild-<implementer|reviewer>.md.
@@ -208,6 +208,9 @@ gbuild node `<slug>`. Store: <DB>. Worktree: <worktree>. Feature branch: <BRANCH
   (upstream values resolved through `FROM` edges), outputs, the failed criteria of a previous attempt,
   and notes. Agents run it with `--read-only`, which opens beside `run`'s writes; `run` stays the only
   writer.
+- **Worker timing through the inbox.** The implementer publishes its start and end times in
+  `<slug>.<attempt-id>.timing`. The monitor reads the file for the current claim, and each retry
+  gets a new attempt ID. Only `run` writes to the store.
 - **Results through inbox files.** The implementer writes `<slug>.json` — outputs, its own UTC times,
   notes, symbols — to `<git-common-dir>/gbuild/<feature>/inbox/` and replies `done <slug>`; the reviewer
   replies with just its `<slug>: VERDICT:` line and, on a fail, its `<slug>: [fail]` lines plus a

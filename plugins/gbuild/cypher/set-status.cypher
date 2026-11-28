@@ -8,6 +8,6 @@
 UNWIND $slugs AS s
 MATCH (n:GbuildNode {slug: s})
 WHERE $status IN ['pending', 'in_progress', 'failed', 'cancelled']
-SET n.status = $status
+SET n.status = $status, n.active_attempt_id = null
 RETURN n.slug AS slug, n.status AS status
 ORDER BY slug;

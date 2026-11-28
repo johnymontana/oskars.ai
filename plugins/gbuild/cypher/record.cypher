@@ -5,7 +5,8 @@
 // agent's own times on the node, and its notes and symbols stored as
 // (n)-[:WROTE]->(:Note) and (n)-[:DEFINES]->(:Symbol). A pass missing outputs
 // is recorded as a fail listing them, so the review history stays truthful. A
-// fail stores the Review only: no outputs, notes or symbols.
+// fail stores the Review only: no outputs, notes or symbols. Recording a verdict
+// also retires the active attempt so a previous worker's timing cannot bleed into a retry.
 // Three params, always all bound (the script can't tell --param from
 // --fetch-params):
 //   verdict  {"slug", "verdict": "pass"|"fail", "failed_criteria": [...]} — the
@@ -69,6 +70,7 @@ WITH n, res, attempt, missing, ok, review, notes, symbols
 OPTIONAL MATCH (n)-[:OUTPUT]->(f:Field) WHERE ok
 SET f.value = res.outputs[f.name]
 WITH DISTINCT n, res, attempt, missing, ok, review, notes, symbols
+SET n.active_attempt_id = null
 FOREACH (_ IN CASE WHEN ok THEN [1] ELSE [] END |
   SET n.status = 'completed', n.started_at = res.started_at, n.completed_at = res.completed_at)
 // An expression subquery may reference query-scope variables but not the

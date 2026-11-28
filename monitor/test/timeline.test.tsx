@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import { describe, test } from "node:test"
 import { fetchCalls } from "./fixtures.ts"
-import { render } from "./helpers.tsx"
+import { act, render } from "./helpers.tsx"
 
 const { GraphDetail } = await import("../ui/GraphDetail.tsx")
 const { TimelineTab } = await import("../ui/TimelineTab.tsx")
@@ -41,6 +41,50 @@ describe("timeline tab", () => {
       "axis shows the time range",
     )
     assert.ok(text.includes("not started") && text.includes("c-waiting"), "unstarted nodes are listed")
+    await unmount()
+  })
+
+  test("distinguishes legacy running nodes, queued workers, and pending nodes", async () => {
+    const nodes = [
+      { slug: "legacy-running", status: "in_progress", started_at: null, completed_at: null },
+      {
+        slug: "claimed-worker", status: "in_progress", started_at: null, completed_at: null,
+        active_attempt: { started_at: null, completed_at: null },
+      },
+      { slug: "pending", status: "blocked", started_at: null, completed_at: null },
+    ] as any
+    const { container, unmount } = await render(<TimelineTab nodes={nodes} />)
+    assert.equal(container.querySelectorAll(".timeline-bar").length, 0)
+    assert.match(container.textContent ?? "", /Running · start time unavailable: legacy-running/)
+    assert.match(container.textContent ?? "", /Queued · waiting for worker start signal: claimed-worker/)
+    assert.match(container.textContent ?? "", /not started: pending/)
+    await unmount()
+  })
+
+  test("active bars advance with the clock while completed implementations hold their duration", async (t) => {
+    t.mock.timers.enable({ apis: ["Date", "setInterval"], now: new Date("2026-01-01T00:00:30Z") })
+    const nodes = [
+      {
+        slug: "active-worker", status: "in_progress", started_at: null, completed_at: null,
+        active_attempt: { started_at: "2026-01-01T00:00:20Z", completed_at: null },
+      },
+      {
+        slug: "reviewing-worker", status: "in_progress", started_at: null, completed_at: null,
+        active_attempt: { started_at: "2026-01-01T00:00:00Z", completed_at: "2026-01-01T00:00:15Z" },
+      },
+      { slug: "done", status: "completed", started_at: "2026-01-01T00:00:01Z", completed_at: "2026-01-01T00:00:05Z" },
+    ] as any
+    const { container, unmount } = await render(<TimelineTab nodes={nodes} />)
+    const duration = (slug: string) => [...container.querySelectorAll(".timeline-row")]
+      .find((r) => r.querySelector(".timeline-label")?.textContent?.startsWith(slug))
+      ?.querySelector(".timeline-bar")?.textContent
+    assert.equal(duration("active-worker"), "10s")
+    assert.equal(duration("reviewing-worker"), "15s")
+    assert.equal(duration("done"), "4s")
+    await act(async () => t.mock.timers.tick(4_000))
+    assert.equal(duration("active-worker"), "14s")
+    assert.equal(duration("reviewing-worker"), "15s")
+    assert.equal(duration("done"), "4s")
     await unmount()
   })
 })

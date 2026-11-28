@@ -3,6 +3,7 @@
 // output fields (with recorded values), review verdicts, model tier, failure
 // policy and run timestamps — plus the feature's acceptance criteria with the
 // nodes covering each.
+import { readActiveAttempt, type ActiveAttempt } from "./attempt.ts"
 import type { Store } from "./discover.ts"
 import { queryStore } from "./query.ts"
 
@@ -25,7 +26,7 @@ END AS state
 RETURN n.slug AS slug, n.title AS title, n.type AS type, state AS status, wave,
        n.acceptance AS acceptance, depends_on,
        n.model_tier AS model_tier, n.failure_policy AS failure_policy,
-       n.started_at AS started_at, n.completed_at AS completed_at
+       n.started_at AS started_at, n.completed_at AS completed_at, n.active_attempt_id AS active_attempt_id
 ORDER BY wave, slug`
 
 // An input's recorded value is the upstream output's value through its FROM
@@ -69,6 +70,7 @@ export interface GraphNode {
   failure_policy: string
   started_at: string | null
   completed_at: string | null
+  active_attempt?: ActiveAttempt | null
   inputs: FieldValue[]
   outputs: FieldValue[]
   reviews: { attempt: number; verdict: string; failed_criteria: string[]; checklist: string[]; at: string }[]
@@ -96,7 +98,7 @@ export async function graphDetail(store: Store): Promise<GraphDetail> {
   const fieldRows = await queryStore(store.db, FIELDS_QUERY)
   const reviewRows = await queryStore(store.db, REVIEWS_QUERY)
   const acceptanceRows = await queryStore(store.db, ACCEPTANCE_QUERY)
-  const nodes: GraphNode[] = nodeRows.map((row) => {
+  const nodes: GraphNode[] = await Promise.all(nodeRows.map(async (row) => {
     const slug = String(row.slug)
     const fields = fieldRows.filter((f) => f.node === slug)
     const field = (f: (typeof fieldRows)[number]): FieldValue => ({
@@ -117,6 +119,7 @@ export async function graphDetail(store: Store): Promise<GraphDetail> {
       failure_policy: String(row.failure_policy),
       started_at: row.started_at == null ? null : String(row.started_at),
       completed_at: row.completed_at == null ? null : String(row.completed_at),
+      active_attempt: row.status === "in_progress" ? await readActiveAttempt(store.db, slug, row.active_attempt_id) : null,
       inputs: fields.filter((f) => f.direction === "INPUT").map(field),
       outputs: fields.filter((f) => f.direction === "OUTPUT").map(field),
       reviews: reviewRows
@@ -129,7 +132,7 @@ export async function graphDetail(store: Store): Promise<GraphDetail> {
           at: String(r.at),
         })),
     }
-  })
+  }))
   return {
     store_id: store.store_id,
     project: store.project,

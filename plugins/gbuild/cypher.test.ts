@@ -83,7 +83,7 @@ const readNotes = (db: string, of: string[] = topics) =>
   rows(db, "MATCH (nt:Note) WHERE nt.topic IN $topics RETURN nt.topic AS topic, nt.text AS text, nt.by_node AS by ORDER BY nt.at DESC, text", { topics: of }, ["--read-only"])
 const count = (db: string, cypher: string): number => one(rows(db, cypher)).n
 const readSymbols = (db: string) => rows(db, script("symbols.cypher"), {}, ["--read-only"])
-const routing = ["failure_policy", "model_tier", "review", "slug", "type"]
+const routing = ["attempt_id", "failure_policy", "model_tier", "review", "slug", "type"]
 
 type Verdict = { slug: string; verdict: string; failed_criteria: string[] }
 const pass = (slug: string): Verdict => ({ slug, verdict: "pass", failed_criteria: [] })
@@ -271,10 +271,42 @@ describe("gbuild cypher layer", { skip: !hasRelate ? "relate not on PATH" : tooO
     const db = exampleStore()
     const a = one(claim(db))
     assert.deepEqual(Object.keys(a).sort(), routing)
-    assert.deepEqual(a, { slug: "a-produce-shared-value", type: "chore", model_tier: "cheap", failure_policy: "retry", review: "mechanical" })
+    const { attempt_id, ...route } = a
+    assert.match(attempt_id, /^[0-9a-f-]{36}$/)
+    assert.deepEqual(route, { slug: "a-produce-shared-value", type: "chore", model_tier: "cheap", failure_policy: "retry", review: "mechanical" })
     assert.deepEqual(claim(db), [], "nothing is ready while the root is in flight")
     assert.equal(states(db)["a-produce-shared-value"], "in_progress")
     assert.doesNotMatch(script("dispatch.cypher"), /INPUT/)
+  })
+
+  test("recording a verdict or resetting a claim retires its timing ID", () => {
+    const db = exampleStore()
+    const first = one(claim(db))
+    const { slug } = first
+    const activeId = () => one(rows(db,
+      "MATCH (n:GbuildNode {slug: $slug}) RETURN n.active_attempt_id AS attempt_id", { slug },
+    )).attempt_id
+    const retry = () => rows(db, script("retry-attempt.cypher"), { slug })
+    assert.equal(activeId(), first.attempt_id)
+    assert.deepEqual(retry(), [], "an unrecorded attempt retains its current ID")
+
+    record(db, fail(slug, "retry this implementation"))
+    assert.equal(activeId(), null)
+    const second = one(retry()).attempt_id
+    assert.notEqual(second, first.attempt_id)
+    assert.equal(activeId(), second)
+
+    rows(db, script("set-status.cypher"), { slugs: [slug], status: "pending" })
+    assert.equal(activeId(), null)
+    const resumed = one(claim(db)).attempt_id
+    assert.notEqual(resumed, second)
+
+    land(db, slug, { value: 7 })
+    assert.equal(activeId(), null)
+    assert.deepEqual(retry(), [], "a completed node cannot acquire another ID")
+    const completed = rows(db, script("status.cypher")).find((row) => row.slug === slug)
+    assert.equal(completed?.started_at, times.started_at)
+    assert.equal(completed?.completed_at, times.completed_at)
   })
 
   test("dispatch schedules per node: a finished chain advances while the other is still running", () => {
@@ -282,7 +314,9 @@ describe("gbuild cypher layer", { skip: !hasRelate ? "relate not on PATH" : tooO
     assert.deepEqual(checks(db), [])
     assert.deepEqual(claim(db).map((n) => n.slug), ["a-first", "b-first"])
     land(db, "a-first", { out: 1 })
-    assert.deepEqual(claim(db), [{ slug: "c-after-a", type: "code", model_tier: "cheap", failure_policy: "retry", review: "reviewer" }])
+    const { attempt_id, ...route } = one(claim(db))
+    assert.match(attempt_id, /^[0-9a-f-]{36}$/)
+    assert.deepEqual(route, { slug: "c-after-a", type: "code", model_tier: "cheap", failure_policy: "retry", review: "reviewer" })
     assert.equal(states(db)["b-first"], "in_progress")
     assert.equal(states(db)["d-after-b"], "blocked")
   })
