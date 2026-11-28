@@ -1,6 +1,9 @@
 ---
+name: plan
 description: Decomposes a feature into a real dependency graph in the gbuild Relate store — nodes with typed field contracts, mandatory concrete acceptance criteria, and edges that pass the cut test. Creates the feature branch in its own git worktree, never touching the main checkout. Use when starting new gbuild work, before /gbuild:run.
 ---
+
+In Codex, read the [Codex runtime notes](../../reference/codex.md) before starting.
 
 Plan the work described in `$ARGUMENTS` as a graph.
 

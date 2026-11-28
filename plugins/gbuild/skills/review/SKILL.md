@@ -1,6 +1,9 @@
 ---
+name: review
 description: Performs a strict end-of-feature maintainability audit of a gbuild feature branch — abstraction quality, file size, spaghetti growth, cross-node duplication, missed code-judo simplifications, complexity the branch added beyond its bar. Runs the audit in the gbuild-auditor sub-agent, in the feature's worktree, and relays its result to chat. Use after /gbuild:run finishes a graph, before /gbuild:pr.
 ---
+
+In Codex, read the [Codex runtime notes](../../reference/codex.md) before starting.
 
 Run the strict end-of-feature maintainability audit in a dedicated sub-agent, then relay its result.
 
@@ -43,14 +46,15 @@ Fetch the feature context:
 relate query --read-only --database DB --mode jsonl < ${CLAUDE_PLUGIN_ROOT}/cypher/feature.cypher
 ```
 
-Launch the `gbuild-auditor` subagent (agents/gbuild-auditor.md — this plugin's own copy, gbuild does not
-depend on hone-ai being installed). Pass it:
+Launch a fresh `gbuild-auditor` subagent using this plugin's `agents/gbuild-auditor.md` role. In
+Codex, use the dispatch and wait tools in the runtime notes. Pass it:
 
 - The resolved slug and the `feature.cypher` result verbatim (destination and the acceptance bar with
   the nodes covering each criterion) — the auditor never opens the store itself, and reads the code from
   the branch diff.
 - The feature worktree path `FT` and the feature branch name — it audits the branch's code from `FT`:
   every read, every check, and every git command runs there, never in the main tree.
+- In Codex, ask the auditor to use `$gbuild:plan` and `$gbuild:pr` in its closing instructions.
 
 The sub-agent runs the full audit in its own fresh context and returns the audit as its final message.
 That message is a tool result — it is NOT shown to the user. So once it returns:
@@ -63,4 +67,4 @@ summarize, reorder, or rewrite it. The closing line is a contract:
 - `Nothing blocking.` followed by `next: /gbuild:pr <slug>` — that exact `Nothing blocking.` text is
   what any caller looping review→fix parses to end the loop.
 
-Both must appear verbatim in the chat output for the rest of the chain to work.
+Keep the auditor's closing lines verbatim, including the Codex skill syntax when applicable.

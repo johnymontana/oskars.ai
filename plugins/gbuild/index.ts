@@ -57,8 +57,8 @@ instructions above:
   \`.git/gbuild/…\` placement, per the skills' placement rule. The store and
   inbox stay under \`<git-common-dir>/gbuild/<slug>/\` regardless, and
   worktrees are always resolved by their branch, never by path.
-- run's "Workflow tool" backend is Claude-specific; always use the fallback
-  backend described in step 2.
+- run's "Workflow tool" backend is Claude-specific; use the asynchronous
+  subagent path.
 `
 
 const frontmatter = (raw: string): { description: string; body: string } => {

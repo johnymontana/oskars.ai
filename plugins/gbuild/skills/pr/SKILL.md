@@ -1,12 +1,16 @@
 ---
+name: pr
 description: Pushes the gbuild feature branch to the appropriate remote, opens a pull request with a concise description that classifies the change (new feature, fix, optimization, etc.) and notes any user-facing impact, then monitors CI checks in the background and auto-triggers a graph reopen + run if any fail. Works from the feature's own worktree, never touching the main checkout's branch. Use after /gbuild:review reports nothing blocking, to publish the finished feature branch.
 ---
 
-Publish a finished feature branch: push it to the right remote, open a well-formed pull request, then watch the PR's CI checks and drive a graph reopen automatically when a check goes red — looping until the checks are green or a round cap is hit.
+In Codex, read the [Codex runtime notes](../../reference/codex.md) before starting.
+
+Publish the finished feature branch to the selected remote and open a pull request. Watch CI and
+reopen the graph for confirmed failures when authorized, up to the round cap.
 
 ## CRITICAL: main-context requirement
 
-This skill MUST run in the **main conversation context**. It MUST NOT be invoked as a forked subagent (e.g. via the Agent/Task tool). The auto-fix step runs `/gbuild:run`, which dispatches one Agent per node — and forked agents cannot nest, so a nested fork will fail. If you are already running inside a forked agent, stop immediately and report that `/gbuild:pr` must be run from the top-level conversation.
+This skill MUST run in the **main conversation context**. It MUST NOT be invoked as a forked subagent (e.g. via the Agent/Task tool). The auto-fix step calls `/gbuild:run`, which needs access to the host's subagent tools. If you are already running inside a forked agent, stop immediately and report that `/gbuild:pr` must be run from the top-level conversation.
 
 ## Step 0: Parse arguments
 
@@ -35,7 +39,7 @@ Choose the push remote from the project's actual remotes:
 
 1. List remotes (`git remote -v`).
 2. **Exactly one remote** → use it.
-3. **Multiple remotes** → look for a push-target hint in `AGENTS.md` or `CLAUDE.md` (e.g. an explicit statement that the project pushes to a fork). If a clear hint exists, use it. Otherwise, use `AskUserQuestion` to let the user pick which remote to push to (e.g. `origin` vs a fork remote).
+3. **Multiple remotes** → look for a push-target hint in `AGENTS.md` or `CLAUDE.md` (e.g. an explicit statement that the project pushes to a fork). If a clear hint exists, use it. Otherwise, ask the user to pick which remote to push to (e.g. `origin` vs a fork remote).
 
 Push the feature branch and set upstream: `git push -u <remote> <branch>` (branch names are refs — the
 main tree's checkout is irrelevant).
@@ -73,7 +77,10 @@ This description was auto generated
 
 The trailing `This description was auto generated` line is **mandatory** — it always ends the body, after every other section, and is never dropped or reworded.
 
-Create the PR: `gh pr create --base <base> --title "<title>" --body "<body>" --draft` — run it with `FT` as the working directory, so `gh` resolves the head from the feature branch (it handles fork `owner:branch` head refs automatically). Capture the PR URL and number (`<pr>`).
+Save the body to a temporary file. From `FT`, run
+`gh pr create --base <base> --title "<title>" --body-file "<body-file>" --draft`.
+The feature worktree lets `gh` resolve the head, including fork `owner:branch` refs. Follow the
+repository's PR policy and capture the PR URL and number (`<pr>`).
 
 **Draft mode is not optional when the repo's agent contract (AGENTS.md/CLAUDE.md) says so.** Before creating, check the repo's instructions for a draft-PR policy; if one exists (e.g. "open every PR as a draft; only a human marks it ready"), the PR MUST open as a draft and this skill NEVER converts it to ready — the green-checks report ends with the PR left in draft, and the human owns the ready flip. `--draft` is the safe default even without an explicit policy: a draft runs the fast gate only.
 
@@ -81,14 +88,21 @@ Create the PR: `gh pr create --base <base> --title "<title>" --body "<body>" --d
 
 Watch the PR's CI checks and react when they fail. Run for at most `max_rounds` rounds:
 
-1. **Launch the watch in the background.** Run `gh pr checks <pr> --watch --fail-fast` (from `FT`) via the Bash tool with `run_in_background: true`. It exits `0` when all checks pass and non-zero when a check fails; the harness re-invokes this skill when the command exits, so continue from the result.
+1. **Watch the checks.** Run `gh pr checks <pr> --watch --fail-fast` from `FT`. In Codex, poll the
+   shell session if the tool returns one. In Claude Code, the Bash tool can run the watcher in the
+   background and notify you when it finishes. Check the repo's CI trigger first. If checks have
+   yet to be triggered, report what is pending and stop unless you are authorized to trigger them.
 2. **Checks green (exit 0):** report success and go to Step 5.
-3. **Checks red (non-zero exit):**
-   - Collect the failure detail: `gh pr checks <pr>` for the failed-check list, and `gh run view <run-id> --log-failed` for the failing logs.
+3. **Watch exits nonzero:** use `gh pr checks <pr>` to distinguish failed checks, pending checks,
+   and watcher errors. Continue watching pending checks when CI is running. If you cannot confirm
+   a failure or continue watching, report that state. For confirmed failures, read
+   `gh run view <run-id> --log-failed` and proceed as follows:
    - **If `<slug>` is unresolved** (the branch wasn't produced by gbuild, so there's no graph to reopen): do not auto-fix. Print which checks failed with their logs and suggest the user fix manually, then go to Step 5 with an `unresolved` status.
-   - **Otherwise, fix automatically** — via the graph, not by patching around it. gbuild has no separate fix skill; a red check is a new requirement:
+   - **Repair through the graph** when the request and repository policy authorize fixes and pushes.
+     Each red check becomes a new requirement. Otherwise report the failure and stop.
      1. Read `${CLAUDE_PLUGIN_ROOT}/skills/plan/SKILL.md` and execute its **Reopen** path inline: `--add "<requirement>"` where the requirement is the failing check stated as a concrete outcome (e.g. `CI check "lint" passes — <the actual error>`). Re-read that file and follow it verbatim rather than paraphrasing it here, so this phase auto-syncs when `plan` changes. One requirement per distinct failing check.
-     2. Run it unattended. `plan`'s Reopen asks nothing, but if executing it would prompt the user (an ambiguous decomposition), resolve it yourself from the failing logs and note the choice in the final report — `/gbuild:pr` runs without a human present.
+     2. Use the failing logs to resolve routine implementation choices. If a material decision or
+        permission is missing, report the blocker and leave the PR available for follow-up.
      3. If Reopen concludes the requirement needs no new nodes, stop the loop and go to Step 5 with an `unresolved` status — the failure isn't something the graph can act on, so surface the logs to the user.
      4. Read `${CLAUDE_PLUGIN_ROOT}/skills/run/SKILL.md` and execute it inline against `<slug>` to run the newly-unblocked frontier. Suppress its trailing `next: /gbuild:status…` line — this skill owns the transition.
    - After the run completes, push the new commits (`git -C FT push`) and **re-launch the watch** (next round).

@@ -1,6 +1,9 @@
 ---
+name: run
 description: Executes a gbuild graph as dataflow — each node starts the moment its own dependencies complete and runs its own implement → review → land → record pipeline in background subagents (each file-touching node in its own git worktree), handing agents only slugs and paths, recording a node complete only after gbuild-reviewer passes it, and resuming only the remaining frontier on re-invocation. Use after /gbuild:plan has charted the graph.
 ---
+
+In Codex, read the [Codex runtime notes](../../reference/codex.md) before starting.
 
 Run the graph for the feature `$ARGUMENTS` (the slug; step 0 resolves `DB`, the store — the feature
 branch lives in its own worktree, so this skill never changes the branch of the user's checkout).
@@ -31,6 +34,9 @@ this skill passes them slugs and paths, reads their one-line replies, and record
   carry them.
 
 ## Step 0: Establish VCS facts, then check and recover
+
+Check that subagent dispatch is available before changing the store or worktrees. Make sure an
+earlier run has stopped before recovering its `in_progress` nodes.
 
 Default to `git`. Resolve these facts first, absolute paths, and reuse them throughout:
 
@@ -96,8 +102,8 @@ relate query --read-only --database DB --mode jsonl < ${CLAUDE_PLUGIN_ROOT}/cyph
 
 ## Step 1: Pick a backend
 
-**Workflow tool**, whenever this session has it — no opt-in needed; gbuild's run is exactly the
-multi-agent fan-out that tool exists for. One `pipeline()` per claimed node: its implement `agent()`,
+**Claude Workflow tool**, when available in Claude Code. Run one `pipeline()` per claimed node,
+starting with its implement `agent()`,
 then — for a `reviewer`-tier node — its `gbuild-reviewer` `agent()`, prompted exactly as in step 2.2
 and read as in step 2.3. A `mechanical` node's pipeline is its implementer alone: land and record it
 from the main context through step 2.3's mechanical gate. A review starts the moment its implementer
@@ -109,9 +115,10 @@ bounded `while` loop per `${CLAUDE_PLUGIN_ROOT}/reference/shapes.md`'s round cap
 touches the store: as each pipeline returns, land and record that node from the main context (steps
 2.4–2.6), then claim again (step 3) and start pipelines for the new rows.
 
-**Fallback** (no Workflow tool in this session): one background subagent call per agent, with the
-review batching of step 2.3. When several nodes become ready at once, dispatch them all in a single
-message — never one per message, which is exactly the serial behavior this plugin replaces.
+**Asynchronous subagents** (Codex, OpenCode, or Claude Code without Workflow): use one agent per
+implementation or review batch. Start independent agents up to the host's concurrency limit.
+Keep excess claimed nodes in a local queue and start them as slots become available. In Codex,
+use the dispatch and completion tools in the runtime notes for every agent handoff below.
 
 ## Step 2: One node's pipeline
 
@@ -144,7 +151,7 @@ one reviewer for several nodes.
    (reuse the registered worktree on that branch; else attach the branch an earlier attempt left; else
    fork a fresh one off `BRANCH` — nothing is redone. Create it where the step-0 placement rule puts
    node worktrees — `WT/<slug>` is the default, a harness convention overrides it.) Then dispatch the
-   implementer — `Agent` tool, `subagent_type`
+   implementer. In Claude Code use the `Agent` tool, `subagent_type`
    `gbuild-implementer` / `gbuild-reviewer` (`gbuild:`-prefixed when namespaced), description
    `implement <slug>` / `review <slug>`, `run_in_background: true` — with this one prompt for both
    agents:
@@ -252,29 +259,30 @@ one reviewer for several nodes.
      `set-status.cypher`, then clean up a worktree'd node: `git worktree remove --force` its worktree and
      `git branch -D gbuild/<feature>/<slug>` — its work was never accepted, so it never lands.
 
-   Then claim again (step 3) — except after `stop`: claim nothing more, finish the pipelines in flight,
-   then step 4.
+   Then claim again (step 3). On `stop`, claim nothing more and finish the pipelines already in
+   flight. Return queued nodes that remain `in_progress` and never started to `pending` with
+   `set-status.cypher`, then go to step 4.
 
 ## Step 3: Claim again
 
 After every `record.cypher` and `set-status.cypher` call, run dispatch.cypher (step 2.1) again and start
-step 2.2 for every row it returns. That is the dataflow: a node starts the moment its own dependencies
-complete, while unrelated slower nodes are still running. Between claims, wait for completion
-notifications and handle each as it arrives.
+step 2.2 for each returned row as an agent slot becomes free. Start newly ready work while unrelated
+nodes are still running. Between claims, wait for completions using the host's wait tool or
+notifications, and handle each as it arrives.
 
 A node is claimed only once everything it depends on has completed, so nodes in flight together never
 read each other's outputs, and every file-touching node works in its own worktree — concurrency is safe
 by construction. Your store calls and the merges into `FT` are the only serialized points; `FT` belongs
 to this feature alone, so no other checkout can race them.
 
-**Lost notifications.** Claude Code can drop a completion notification when 3 or more background agents
+**Lost notifications in Claude Code.** Claude Code can drop a completion notification when 3 or more background agents
 run at once. When an agent stays silent well past ones started after it, or you wake with nothing new to
 handle, check instead of waiting: an implementer whose `INBOX/<slug>.json` exists counts as
 `done <slug>` (it writes `.tmp` then renames, so presence means complete); otherwise, and for a
 reviewer, fetch the reply by task id (`TaskOutput`) where the harness offers it. A reviewer whose reply
 still can't be had is re-dispatched once in the foreground (step 2.3). Never take a verdict from a file.
 
-Stop when a claim returns no rows and no agent is in flight: step 4.
+Stop when a claim returns no rows, the queue is empty, and no pipeline is in flight: step 4.
 
 ## Step 4: Report and stop
 

@@ -1,6 +1,9 @@
 ---
+name: status
 description: Reports a gbuild feature's graph — frontier, blocked, in-flight, completed, each node's review verdict, and the cluster shapes with evidence of what actually ran concurrently. Use to check progress or diagnose a stuck run.
 ---
+
+In Codex, read the [Codex runtime notes](../../reference/codex.md) before starting.
 
 Report status for `$ARGUMENTS`. This skill only reads the store. `DB` below is the feature's store:
 `<git-common-dir>/gbuild/<feature>/db`, beside the feature worktree `FT` at

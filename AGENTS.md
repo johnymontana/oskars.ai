@@ -11,3 +11,6 @@ This is a repository for agent plugins and skills created by Oskar Hane.
   `index.ts` translates paths and references at load time rather than forking content. OpenCode
   distribution is via npm publish (git `::path:` subdir installs are not honored by bun/npm).
   See `plugins/gbuild/` for the reference implementation.
+- A plugin can also support Codex through `.codex-plugin/plugin.json` and the repo marketplace
+  at `.agents/plugins/marketplace.json`. Share skill and agent Markdown across clients, and keep
+  Codex-specific tool mappings in the plugin's runtime notes.

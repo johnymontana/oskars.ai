@@ -1,4 +1,4 @@
-# gbuild — Claude Code + OpenCode plugin
+# gbuild for Claude Code, Codex, and OpenCode
 
 Graph-native task planning and execution: design a feature with the human, plan it as a real
 dependency graph, then run it with actual concurrent fan-out, a dedicated review pass on every node,
@@ -20,7 +20,8 @@ The feature branch lives in its own git worktree (created by `design` or `plan`)
 branches, your uncommitted work is never in the way, and several features can be in flight in parallel
 without racing each other's `HEAD`.
 
-(OpenCode: `/gbuild-plan`, `/gbuild-run`, … — same loop.)
+Use `$gbuild:plan`, `$gbuild:run`, and the other `$gbuild:…` skills in Codex. In OpenCode use
+`/gbuild-plan`, `/gbuild-run`, and the corresponding slash commands.
 
 Inspired by the graph-engineering thread at
 [x.com/0xwhrrari/status/2086784668003598356](https://x.com/0xwhrrari/status/2086784668003598356):
@@ -29,7 +30,8 @@ verification never grades itself.
 
 ## Install
 
-gbuild needs the `relate` CLI on PATH — see [Runtime](#runtime).
+gbuild's graph workflow requires `relate` 1.0.1 or newer on `PATH`. Publishing with `pr` also
+requires an authenticated `gh` CLI. See [Runtime](#runtime).
 
 ### Claude Code
 
@@ -45,6 +47,27 @@ For local development:
 ```bash
 claude --plugin-dir ./plugins/gbuild
 ```
+
+### Codex
+
+Use a Codex CLI that has `codex plugin marketplace add` and `codex plugin add` (tested with 0.172.0):
+
+```bash
+codex plugin marketplace add oskarhane/oskars.ai
+codex plugin add gbuild@oskars-ai
+```
+
+Start a new Codex session and invoke `$gbuild:design <feature>` or `$gbuild:plan <plan>`.
+To test from a local checkout, pass the repository root to `codex plugin marketplace add` in place of
+`oskarhane/oskars.ai`. To update a Git-backed install, run:
+
+```bash
+codex plugin marketplace upgrade oskars-ai
+codex plugin add gbuild@oskars-ai
+```
+
+`run` and `review` use Codex subagents. Worktrees and the graph store can require approval for Git
+metadata writes. The [Codex runtime notes](./reference/codex.md) describe dispatch and permissions.
 
 ### OpenCode
 
@@ -66,14 +89,16 @@ development, point any `opencode.json(c)` at a checkout instead:
 }
 ```
 
-#### Releasing
+## Releasing
 
 Releases are dispatched from the GitHub Actions tab, never published by hand: pick the
 **gbuild release** workflow → **Run workflow** → choose a level (`patch`, `minor` or `major`).
 The workflow (`.github/workflows/gbuild-release.yml`) always releases `main`, whatever branch
-it was dispatched from. It bumps `version` in `package.json` and `.claude-plugin/plugin.json`
+it was dispatched from. It bumps `version` in `package.json`, `.claude-plugin/plugin.json`, and
+`.codex-plugin/plugin.json`
 in lockstep (`scripts/bump-versions.mjs`), runs the full gbuild test suite
-(`node --import tsx --test` from this directory — any failure aborts the release), publishes
+(`node --import tsx --test` from this directory), smoke-tests Codex installation and skill discovery,
+publishes
 `opencode-gbuild` to npm with provenance (contents stay whitelisted via `files` +
 `.npmignore`), and only then pushes the `chore(gbuild): release X` commit to `main`, tags
 `gbuild-vX.Y.Z` and opens the GitHub Release for that tag. On Actions runners the
@@ -111,6 +136,18 @@ it.` followed by exactly what the review skill passes it. The agent's text is ne
 prompt. The review is still a fresh, isolated agent — never the implementer.
 
 ## Usage
+
+Codex:
+
+```text
+$gbuild:design add OAuth login with GitHub
+$gbuild:plan add OAuth login with GitHub
+$gbuild:run add-oauth-login-with-github
+$gbuild:status add-oauth-login-with-github
+$gbuild:review add-oauth-login-with-github
+$gbuild:pr add-oauth-login-with-github
+$gbuild:cleanup add-oauth-login-with-github
+```
 
 Claude Code:
 
@@ -193,6 +230,36 @@ independent nodes end up serialized for no reason, and nothing catches it. gbuil
 edges; `run` acts on them — independent nodes run at the same time, a node starts as soon as the
 nodes it reads from have landed, a join waits for every incoming edge, and a controlled cycle gets a
 hard round cap instead of an open-ended loop.
+
+## Smoke-test Codex
+
+From the repository root, run `node plugins/gbuild/scripts/smoke-codex.mjs` to check that Codex
+discovers all seven installed skills. Add `--catalog-only` to inspect a local checkout before
+installing it.
+
+To verify dispatch and resume with a signed-in Codex session, seed the example diamond in a
+disposable Git checkout. Run the following from the root of `oskars.ai`:
+
+```bash
+gbuild_plugin="$PWD/plugins/gbuild"
+gbuild_fixture="$(mktemp -d)"
+git -C "$gbuild_fixture" init
+git -C "$gbuild_fixture" -c user.name=gbuild -c user.email=gbuild@example.invalid \
+  commit --allow-empty -m "Start gbuild smoke test"
+gbuild_feature="$gbuild_fixture/.git/gbuild/example-diamond"
+mkdir -p "$gbuild_feature/db"
+git -C "$gbuild_fixture" worktree add "$gbuild_feature/tree" -b gbuild/example-diamond
+relate query --database "$gbuild_feature/db" --snapshot-format json < "$gbuild_plugin/cypher/schema.cypher"
+relate query --database "$gbuild_feature/db" < "$gbuild_plugin/templates/example.cypher"
+codex -C "$gbuild_fixture"
+```
+
+1. Invoke `$gbuild:run example-diamond`. After A is recorded, B and C should dispatch independently.
+2. Interrupt while B or C is in flight. Once that run has stopped, invoke
+   `$gbuild:run example-diamond` again. Only unfinished nodes should run. Reviewers should make
+   separate passes, and D should start after both branches of the diamond complete.
+3. Invoke `$gbuild:status example-diamond`. Check that all four nodes completed and the
+   recorded review verdicts passed. A should still have just one recorded attempt.
 
 ## How agents get their context
 

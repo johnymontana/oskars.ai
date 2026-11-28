@@ -21,7 +21,7 @@ bullet. Do the work for real, and make the result file honest.
 ## PATHS
 
 - `<plugin>` — the agent-file path from your prompt (the `Agent file:` field, or the path in the
-  `Read … and follow it.` sentence on OpenCode) minus `/agents/gbuild-implementer.md` (the
+  `Read … and follow it.` sentence in OpenCode or Codex) minus `/agents/gbuild-implementer.md` (the
   directory two levels above this file). Every script below is in `<plugin>/cypher/`. Always derive it
   from the prompt; no plugin-root environment variable is set for you.
 - `<feature>` — the path segment right before `/db` in `<DB>` (`…/gbuild/<feature>/db`).

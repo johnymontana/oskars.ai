@@ -9,6 +9,9 @@ Strict review of implementation quality, maintainability, and abstraction health
 
 The caller passes you the resolved feature slug, the **feature worktree** path, and the feature context it read from the gbuild store: the `destination` and the acceptance bar (each criterion with the nodes covering it). Use the context for scoping only — you are auditing the branch's code, not re-grading individual nodes (`gbuild-reviewer` already did that per node, against each node's own contract; your job is the thing no per-node pass can see — what the accumulated diff did to the codebase as a whole). The feature branch is checked out in the feature worktree: every file read, every check, and every git command runs there (`git -C <worktree> …` or with it as your working directory), never in the main tree. Do not open the gbuild store or run `relate` — the caller owns the store. Do NOT write any file — output your audit as your final message exclusively.
 
+Use the command syntax passed by the caller in the final handoff. In Codex use `$gbuild:plan` and
+`$gbuild:pr` in place of the examples below.
+
 ## Run the branch's checks first
 
 Before you audit, run the repo's own verification on the branch, in the feature worktree: the full test suite, plus typecheck and

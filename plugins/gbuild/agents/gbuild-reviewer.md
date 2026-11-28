@@ -26,11 +26,11 @@ same-wave siblings the orchestrator held for you:
 gbuild node `<slug>`. Store: <DB>. Worktree: <worktree>. Feature branch: <BRANCH>. Agent file: <plugin>/agents/gbuild-reviewer.md.
 ```
 
-On OpenCode the `Agent file:` field moves to the front instead: the prompt starts with
+In OpenCode and Codex the `Agent file:` field moves to the front: the prompt starts with
 `Read <agent file> and follow it.`, followed by the node lines without their `Agent file:` field.
 
 `<plugin>` is the directory two levels above the agent-file path — the `Agent file:` field, or the
-path in the `Read … and follow it.` sentence on OpenCode (the path minus
+path in the `Read … and follow it.` sentence in OpenCode or Codex (the path minus
 `/agents/gbuild-reviewer.md`). Never rely on `${CLAUDE_PLUGIN_ROOT}` here; derive it from the path.
 `<INBOX>` is the inbox directory beside `<DB>`: the `<DB>` path with its trailing `/db` replaced by
 `/inbox`. Work through the nodes in prompt order: for each, fetch everything yourself, in this order:

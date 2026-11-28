@@ -1,16 +1,16 @@
 # oskars.ai
 
-Claude Code plugin marketplace by Oskar Hane. Some plugins also target OpenCode — noted per plugin.
+Agent plugins by Oskar Hane. All plugins support Claude Code. The table shows which also support Codex and OpenCode.
 
 ## Plugins
 
-| Plugin | Description | OpenCode |
-|--------|-------------|----------|
-| [autoresearch](./plugins/autoresearch/) | Autonomous experiment loop: try ideas, keep what works, discard what doesn't | |
-| [coding-skills](./plugins/coding-skills/) | Language-specific coding skills (TypeScript security, more to come) | |
-| [product-skills](./plugins/product-skills/) | Product management skills — discovery, specs, prioritization, and reviews | |
-| [gbuild](./plugins/gbuild/) | Graph-native task planning and execution: dependency-graph plans, concurrent fan-out, per-node review | ✓ |
-| [stellar-review](./plugins/stellar-review/) | Strict maintainability review as a deterministic pipeline: scripted facts, cross-round ledger, four focused passes, scripted verdict | ✓ |
+| Plugin | Description | Codex | OpenCode |
+|--------|-------------|-------|----------|
+| [autoresearch](./plugins/autoresearch/) | Autonomous experiment loop: try ideas, keep what works, discard what doesn't | | |
+| [coding-skills](./plugins/coding-skills/) | Language-specific coding skills (TypeScript security, more to come) | | |
+| [product-skills](./plugins/product-skills/) | Product management skills — discovery, specs, prioritization, and reviews | | |
+| [gbuild](./plugins/gbuild/) | Graph-native task planning and execution: dependency-graph plans, concurrent fan-out, per-node review | ✓ | ✓ |
+| [stellar-review](./plugins/stellar-review/) | Strict maintainability review as a deterministic pipeline: scripted facts, cross-round ledger, four focused passes, scripted verdict | | ✓ |
 
 ## Install
 
@@ -20,6 +20,16 @@ Add the marketplace, then install any plugin:
 claude plugin marketplace add oskarhane/oskars.ai
 claude plugin install autoresearch@oskars.ai
 ```
+
+For gbuild in Codex:
+
+```bash
+codex plugin marketplace add oskarhane/oskars.ai
+codex plugin add gbuild@oskars-ai
+```
+
+Start a new Codex session and use `$gbuild:design` or `$gbuild:plan`. See the
+[gbuild installation guide](./plugins/gbuild/README.md#codex) for prerequisites and updates.
 
 For plugins marked OpenCode-compatible (gbuild, stellar-review):
 

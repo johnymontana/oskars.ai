@@ -1,6 +1,9 @@
 ---
+name: cleanup
 description: Removes a gbuild feature's entire local footprint — every worktree it opened (the feature worktree and each node's), its feature and node branches, the Relate store, and the inbox — after checking the graph's state and where its work landed, with one confirmation listing everything that dies. Local only — never the remote, never the user's own checkout. Use when the feature's PR is merged and the graph is no longer needed, or the feature is abandoned for good.
 ---
+
+In Codex, read the [Codex runtime notes](../../reference/codex.md) before starting.
 
 Remove the local footprint of the feature `$ARGUMENTS` (the slug): every worktree gbuild opened for it,
 its branches, and its store — everything under `<git-common-dir>/gbuild/<slug>/` dies with the feature.

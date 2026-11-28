@@ -1,6 +1,9 @@
 ---
+name: design
 description: Designs a feature with the human — the design step before /gbuild:plan charts it: analyses the codebase, drives the discussion in batched question rounds, and commits the design artifacts (docs/design/<slug>/, entry doc design.md) to the feature branch in its own git worktree, never touching the main checkout. Ends only when the human calls the design good; re-invoking with the slug resumes from the committed artifacts. Runs without relate and without a store — use when the work needs shaping before it can be charted.
 ---
+
+In Codex, read the [Codex runtime notes](../../reference/codex.md) before starting.
 
 Design the feature described by `$ARGUMENTS` — with the human, before `/gbuild:plan` charts it.
 

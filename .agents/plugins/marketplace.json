@@ -1,0 +1,17 @@
+{
+  "name": "oskars-ai",
+  "plugins": [
+    {
+      "name": "gbuild",
+      "source": {
+        "source": "local",
+        "path": "./plugins/gbuild"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

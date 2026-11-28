@@ -386,7 +386,7 @@ CREATE (b)-[:WROTE]->(:Note {topic: 'setup', text: 'setup step ' + toString(i), 
     assert.deepEqual(c.slice(1, 3).map((n: Row) => n.text), ["setup step 34", "setup step 33"], "then newest first")
   })
 
-  test("a full run: fan-out, input flow, and the join waiting for both branches", () => {
+  test("a full run: fan-out, interruption, resume, and the join waiting for both branches", () => {
     const db = exampleStore()
     assert.deepEqual(claim(db).map((n) => n.slug), ["a-produce-shared-value"])
     land(db, "a-produce-shared-value", { value: 7 })
@@ -397,6 +397,12 @@ CREATE (b)-[:WROTE]->(:Note {topic: 'setup', text: 'setup step ' + toString(i), 
 
     land(db, "b-consume-doubled", { doubled: 14 })
     assert.deepEqual(claim(db), [], "the join waits for c")
+    const interrupted = rows(db, script("attention.cypher"), {}, ["--read-only"])
+      .filter((entry) => entry.reason === "in_progress").map((entry) => entry.slug)
+    assert.deepEqual(interrupted, ["c-consume-squared"])
+    rows(db, script("set-status.cypher"), { slugs: interrupted, status: "pending" })
+    assert.deepEqual(claim(db).map((entry) => entry.slug), interrupted, "resume claims only unfinished work")
+    assert.equal(node(db, "b-consume-doubled").reviews.length, 1, "completed review was preserved")
     land(db, "c-consume-squared", { squared: 49 })
 
     const d = one(claim(db))
