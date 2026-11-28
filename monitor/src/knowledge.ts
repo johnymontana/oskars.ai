@@ -17,6 +17,7 @@ RETURN s.name AS name, s.file AS file, s.purpose AS purpose, s.by_node AS by_nod
 ORDER BY s.at, name`
 
 export interface KnowledgeNote {
+  store_id: string
   topic: string
   text: string
   by_node: string
@@ -25,6 +26,7 @@ export interface KnowledgeNote {
 }
 
 export interface KnowledgeSymbol {
+  store_id: string
   name: string
   file: string
   purpose: string
@@ -50,6 +52,7 @@ export async function listKnowledge(config: MonitorConfig): Promise<Knowledge> {
             topic: String(row.topic),
             text: String(row.text),
             by_node: String(row.by_node),
+            store_id: store.store_id,
             project: store.project,
             feature: store.slug,
           })),
@@ -58,6 +61,7 @@ export async function listKnowledge(config: MonitorConfig): Promise<Knowledge> {
             file: String(row.file),
             purpose: String(row.purpose),
             by_node: String(row.by_node),
+            store_id: store.store_id,
             project: store.project,
             feature: store.slug,
           })),
@@ -84,7 +88,7 @@ export interface KnowledgeGraphRel {
   type: string
   from: string
   to: string
-  properties: { project: string; feature: string; by_node: string }
+  properties: { store_id: string; project: string; feature: string; by_node: string }
 }
 
 export interface KnowledgeGraph {
@@ -99,16 +103,16 @@ export async function knowledgeGraph(config: MonitorConfig): Promise<KnowledgeGr
   const addNode = (node: KnowledgeGraphNode) => {
     if (!nodes.has(node.id)) nodes.set(node.id, node)
   }
-  const featureNode = (project: string, feature: string): string => {
+  const featureNode = ({ store_id, project, feature }: KnowledgeNote | KnowledgeSymbol): string => {
     const id = `Feature:${project}:${feature}`
-    addNode({ id, labels: ["Feature"], properties: { project, feature } })
+    addNode({ id, labels: ["Feature"], properties: { store_id, project, feature } })
     return id
   }
   const addRel = (
     type: string,
     from: string,
     to: string,
-    provenance: { project: string; feature: string; by_node: string },
+    provenance: KnowledgeNote | KnowledgeSymbol,
   ) => {
     const id = `${type}:${from}->${to}:${provenance.by_node}`
     rels.set(id, {
@@ -116,21 +120,26 @@ export async function knowledgeGraph(config: MonitorConfig): Promise<KnowledgeGr
       type,
       from,
       to,
-      properties: { project: provenance.project, feature: provenance.feature, by_node: provenance.by_node },
+      properties: {
+        store_id: provenance.store_id,
+        project: provenance.project,
+        feature: provenance.feature,
+        by_node: provenance.by_node,
+      },
     })
   }
   for (const symbol of symbols) {
     // name+file merges across stores; the first occurrence's purpose stands
     const id = `Symbol:${symbol.name}:${symbol.file}`
     addNode({ id, labels: ["Symbol"], properties: { name: symbol.name, file: symbol.file, purpose: symbol.purpose } })
-    addRel("DEFINES", featureNode(symbol.project, symbol.feature), id, symbol)
+    addRel("DEFINES", featureNode(symbol), id, symbol)
   }
   for (const note of notes) {
     const noteId = `Note:${note.project}:${note.feature}:${note.topic}:${note.text}`
     addNode({ id: noteId, labels: ["Note"], properties: { topic: note.topic, text: note.text, by_node: note.by_node } })
     const topicId = `Topic:${note.topic}`
     addNode({ id: topicId, labels: ["Topic"], properties: { topic: note.topic } })
-    addRel("WROTE", featureNode(note.project, note.feature), noteId, note)
+    addRel("WROTE", featureNode(note), noteId, note)
     addRel("ABOUT", noteId, topicId, note)
   }
   const byId = <T extends { id: string }>(a: T, b: T) => a.id.localeCompare(b.id)

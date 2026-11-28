@@ -1,7 +1,7 @@
 // GET /api/features: one summary per discovered store — project path, feature
 // slug, destination, and per-status node counts.
 import type { MonitorConfig } from "./config.ts"
-import { discoverStores } from "./discover.ts"
+import { discoverStores, type Store } from "./discover.ts"
 import { queryStore } from "./query.ts"
 
 const FEATURE_QUERY = `MATCH (f:Feature) RETURN f.feature AS slug, f.destination AS destination`
@@ -19,31 +19,28 @@ RETURN state, count(*) AS count
 ORDER BY state`
 
 export interface FeatureSummary {
+  store_id: string
   project: string
   slug: string
   destination: string
   status_counts: Record<string, number>
 }
 
+export async function readFeatureSummary(store: Store): Promise<FeatureSummary> {
+  const [feature] = await queryStore(store.db, FEATURE_QUERY)
+  if (!feature) throw new Error("Store has no Feature node")
+  const rows = await queryStore(store.db, COUNTS_QUERY)
+  return {
+    store_id: store.store_id,
+    project: store.project,
+    slug: String(feature.slug),
+    destination: String(feature.destination),
+    status_counts: Object.fromEntries(rows.map((r) => [String(r.state), Number(r.count)])),
+  }
+}
+
 export async function listFeatures(config: MonitorConfig): Promise<FeatureSummary[]> {
   const stores = await discoverStores(config.roots)
-  const summaries = await Promise.all(
-    stores.map(async (store): Promise<FeatureSummary | null> => {
-      try {
-        const [feature] = await queryStore(store.db, FEATURE_QUERY)
-        if (!feature) return null
-        const rows = await queryStore(store.db, COUNTS_QUERY)
-        const status_counts = Object.fromEntries(rows.map((r) => [String(r.state), Number(r.count)]))
-        return {
-          project: store.project,
-          slug: String(feature.slug),
-          destination: String(feature.destination),
-          status_counts,
-        }
-      } catch {
-        return null // a store that fails to open is skipped; the rest still list
-      }
-    }),
-  )
-  return summaries.filter((s): s is FeatureSummary => s !== null)
+  const summaries = await Promise.allSettled(stores.map(readFeatureSummary))
+  return summaries.flatMap((summary) => (summary.status === "fulfilled" ? [summary.value] : []))
 }

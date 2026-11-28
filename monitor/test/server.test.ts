@@ -5,12 +5,13 @@
 // root:  node --import tsx --test monitor/test/server.test.ts
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { after, before, describe, test } from "node:test"
 import { fileURLToPath } from "node:url"
 import { loadConfig } from "../src/config.ts"
+import { scanStores } from "../src/discover.ts"
 import { startServer } from "../src/server.ts"
 import { storeGraph } from "../src/storegraph.ts"
 import type { Server } from "node:http"
@@ -104,10 +105,10 @@ describe("monitor server", { skip: !hasRelate }, () => {
     buildStore(join(root, "project-two"), "beta", BETA)
     mkdirSync(join(root, "not-a-project")) // no .git/gbuild — discovery must skip it
     configPath = join(root, "monitor.json")
-    writeFileSync(configPath, JSON.stringify({ roots: [root] }))
+    writeFileSync(configPath, JSON.stringify({ roots: [root, join(root, "missing-root")] }))
     server = await startServer(configPath, { port: 0 })
     const address = server.address()
-    base = `http://localhost:${typeof address === "object" && address ? address.port : 0}`
+    base = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}`
   })
 
   after(async () => {
@@ -137,6 +138,68 @@ describe("monitor server", { skip: !hasRelate }, () => {
     const wrongShape = join(root, "wrong.json")
     writeFileSync(wrongShape, JSON.stringify({ root }))
     await assert.rejects(loadConfig(wrongShape), /non-empty "roots" array/)
+  })
+
+  test("the monitor binds to loopback and reports port conflicts", async () => {
+    const address = server.address()
+    assert.ok(address && typeof address === "object")
+    assert.equal(address.address, "127.0.0.1")
+    assert.ok(address.port > 0)
+    await assert.rejects(startServer(configPath, { port: address.port }), /address already in use; choose another port/)
+  })
+
+  test("store identity survives scan aliases and separates duplicate feature slugs", async (t) => {
+    const aliasRoot = join(root, "alias-root")
+    mkdirSync(aliasRoot)
+    t.after(() => rmSync(aliasRoot, { recursive: true, force: true }))
+    symlinkSync(join(root, "project-one"), join(aliasRoot, "project-alias"), "dir")
+    const discovered = (await scanStores([root, aliasRoot])).stores
+    const original = discovered.find((store) => store.slug === "alpha")
+    assert.equal(discovered.filter((store) => store.slug === "alpha").length, 1)
+    assert.equal((await scanStores([aliasRoot])).stores[0]?.store_id, original?.store_id)
+
+    const duplicate = join(root, "duplicate-project")
+    t.after(() => rmSync(duplicate, { recursive: true, force: true }))
+    buildStore(duplicate, "alpha", ALPHA.replace("Alpha feature done.", "A different feature."))
+    const overview = await get("/api/overview")
+    const both = overview.body.features.filter((item: any) => item.slug === "alpha")
+    assert.equal(both.length, 2)
+    assert.notEqual(both[0].store_id, both[1].store_id)
+    const ambiguous = await get("/api/features/alpha/graph")
+    assert.equal(ambiguous.status, 409)
+    assert.deepEqual(
+      ambiguous.body.matches,
+      both.map(({ store_id, project, slug }: any) => ({ store_id, project, slug })),
+    )
+    assert.equal((await get("/api/features/beta/graph")).status, 200)
+    for (const item of both) {
+      const graph = await get(`/api/features/${item.store_id}/graph`)
+      assert.equal(graph.body.store_id, item.store_id)
+      assert.equal(graph.body.destination, item.destination)
+      const query = await post(`/api/features/${item.store_id}/query`, {
+        cypher: "MATCH (f:Feature) RETURN f.destination AS destination",
+      })
+      assert.deepEqual(query.body.rows, [{ destination: item.destination }])
+    }
+  })
+
+  test("overview keeps healthy stores and reports scan and store failures", async (t) => {
+    const broken = join(root, "broken-project")
+    t.after(() => rmSync(broken, { recursive: true, force: true }))
+    const malformed = join(broken, ".git", "gbuild", "malformed", "db")
+    mkdirSync(malformed, { recursive: true })
+    writeFileSync(join(malformed, "manifest.json"), "{ nope")
+    buildStore(broken, "empty", "")
+    const { status, body } = await get("/api/overview")
+    assert.equal(status, 200)
+    assert.deepEqual(body.features.map((feature: any) => feature.slug).sort(), ["alpha", "beta"])
+    assert.equal(body.attention.length, 3)
+    assert.ok(Number.isFinite(Date.parse(body.observed_at)))
+    const missing = body.diagnostics.find((diagnostic: any) => diagnostic.root === join(root, "missing-root"))
+    assert.match(missing?.message, /Could not scan root/)
+    assert.match(body.diagnostics.find((diagnostic: any) => diagnostic.slug === "malformed")?.message, /Could not open store manifest/)
+    assert.match(body.diagnostics.find((diagnostic: any) => diagnostic.slug === "empty")?.message, /no Feature node/)
+    assert.ok(body.diagnostics.find((diagnostic: any) => diagnostic.slug === "empty")?.store_id)
   })
 
   test("GET /api/features lists one entry per discovered store with counts", async () => {
@@ -221,6 +284,8 @@ describe("monitor server", { skip: !hasRelate }, () => {
     assert.equal(blocked.feature, "alpha")
     assert.equal(blocked.state, "blocked")
     assert.deepEqual(blocked.waiting_on, ["c-fix"])
+    assert.deepEqual(blocked.blocking_failures, ["c-fix"])
+    assert.equal(fix.blocked_count, 1)
     assert.deepEqual(blocked.last_failed_criteria, [])
 
     // beta's failed node: the last failed criteria come from the latest review.
@@ -233,6 +298,31 @@ describe("monitor server", { skip: !hasRelate }, () => {
     // frontier and in_progress nodes never need attention
     assert.equal(body.find((i: any) => i.node === "b-use"), undefined)
     assert.equal(body.find((i: any) => i.node === "r-scan"), undefined)
+  })
+
+  test("attention attributes each blocked node once per failed ancestor", async (t) => {
+    const project = join(root, "failure-chain-project")
+    t.after(() => rmSync(project, { recursive: true, force: true }))
+    buildStore(project, "chain", ALPHA.replace("feature: 'alpha'", "feature: 'chain'").replace(
+      "CREATE (d)-[:DEPENDS_ON]->(c);",
+      `CREATE (d)-[:DEPENDS_ON]->(c)
+      CREATE (other:GbuildNode:Code {slug: 'other-fix', title: 'Other failure', type: 'code',
+        acceptance: [], failure_policy: 'retry', model_tier: 'cheap', status: 'failed'})
+      CREATE (e:GbuildNode:Code {slug: 'join', title: 'Join', type: 'code',
+        acceptance: [], failure_policy: 'retry', model_tier: 'cheap', status: 'pending'})
+      CREATE (ordinary:GbuildNode:Code {slug: 'ordinary', title: 'Wait on runnable work', type: 'code',
+        acceptance: [], failure_policy: 'retry', model_tier: 'cheap', status: 'pending'})
+      CREATE (e)-[:DEPENDS_ON]->(c), (e)-[:DEPENDS_ON]->(d), (e)-[:DEPENDS_ON]->(other)
+      CREATE (ordinary)-[:DEPENDS_ON]->(b);`,
+    ))
+    const { body } = await get("/api/attention")
+    const items = body.filter((item: any) => item.feature === "chain")
+    const byNode = (node: string) => items.find((item: any) => item.node === node)
+    assert.deepEqual(byNode("join").blocking_failures, ["c-fix", "other-fix"])
+    assert.deepEqual(byNode("ordinary").blocking_failures, [])
+    assert.equal(byNode("c-fix").blocked_count, 2)
+    assert.equal(byNode("other-fix").blocked_count, 1)
+    assert.equal(items.filter((item: any) => item.state === "blocked").length, 3)
   })
 
   test("GET /api/knowledge lists notes and symbols across all stores", async () => {
@@ -345,7 +435,7 @@ CREATE (:Field {name: 'value', shape: '<integer>'});
 `,
       )
       await assert.rejects(
-        storeGraph({ project: orphanRoot, slug: "orphan", db }),
+        storeGraph({ store_id: "orphan-store", project: orphanRoot, slug: "orphan", db }),
         /Field "value" has no INPUT\/OUTPUT edge from an owning GbuildNode/,
       )
     } finally {
@@ -367,10 +457,25 @@ CREATE (:Field {name: 'value', shape: '<integer>'});
     assert.equal(write.status, 400)
     assert.match(write.body.error, /write operations are not allowed|read-only/i)
 
-    const wide = await post("/api/features/alpha/query", { cypher: "UNWIND range(1, 501) AS i RETURN i" })
+    const wide = await post("/api/features/alpha/query", { cypher: "UNWIND range(1, 555) AS i RETURN i" })
     assert.equal(wide.status, 200)
     assert.equal(wide.body.rows.length, 500)
-    assert.ok(!wide.body.rows.some((r: any) => r.i === 501))
+    assert.deepEqual(wide.body.rows.at(-1), { i: 500 })
+    assert.ok(wide.body.rows.every((r: any) => Number.isInteger(r.i)))
+    assert.equal(wide.body.truncated, true)
+    assert.equal(wide.body.limit, 500)
+    const exact = await post("/api/features/alpha/query", { cypher: "UNWIND range(1, 500) AS i RETURN i" })
+    assert.equal(exact.body.rows.length, 500)
+    assert.equal(exact.body.truncated, false)
+    const oversized = await post("/api/features/alpha/query", { cypher: " ".repeat(65_536) })
+    assert.equal(oversized.status, 413)
+    assert.match(oversized.body.error, /bytes/)
+    const largeResult = await post("/api/features/alpha/query", {
+      cypher: `UNWIND range(1, 501) AS i RETURN i, '${"x".repeat(8192)}' AS value`,
+    })
+    assert.equal(largeResult.status, 422)
+    assert.match(largeResult.body.error, /output limit/)
+    assert.equal((await post("/api/features/alpha/query", { cypher: "RETURN 1 AS ok" })).status, 200)
 
     const noCypher = await post("/api/features/alpha/query", {})
     assert.equal(noCypher.status, 400)
@@ -391,7 +496,7 @@ CREATE (:Field {name: 'value', shape: '<integer>'});
     for (const rel of body.rels) {
       assert.ok(nodeIds.has(rel.from), `from of ${rel.id}`)
       assert.ok(nodeIds.has(rel.to), `to of ${rel.id}`)
-      assert.ok(rel.properties.project && rel.properties.feature && rel.properties.by_node, `provenance on ${rel.id}`)
+      assert.ok(rel.properties.store_id && rel.properties.project && rel.properties.feature && rel.properties.by_node, `provenance on ${rel.id}`)
     }
 
     // one node for the symbol both stores define, with one DEFINES edge each

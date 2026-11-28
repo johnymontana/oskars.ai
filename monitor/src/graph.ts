@@ -81,6 +81,7 @@ export interface AcceptanceCriterion {
 }
 
 export interface GraphDetail {
+  store_id: string
   project: string
   slug: string
   destination: string
@@ -130,6 +131,7 @@ export async function graphDetail(store: Store): Promise<GraphDetail> {
     }
   })
   return {
+    store_id: store.store_id,
     project: store.project,
     slug: String(feature.slug),
     destination: String(feature.destination),

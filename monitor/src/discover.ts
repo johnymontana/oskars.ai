@@ -1,47 +1,87 @@
-// Finds gbuild stores under the configured roots: a store is
-// <root>/<project>/.git/gbuild/<feature>/db holding a Relate manifest.
-import { readFile, readdir } from "node:fs/promises"
+// Finds gbuild stores under <root>/<project>/.git/gbuild/<feature>/db.
+import { createHash } from "node:crypto"
+import { readFile, readdir, realpath } from "node:fs/promises"
 import { join } from "node:path"
 
 export interface Store {
+  store_id: string
   project: string
   slug: string
   db: string
 }
 
-const isStore = async (db: string): Promise<boolean> => {
-  try {
-    const manifest = JSON.parse(await readFile(join(db, "manifest.json"), "utf8"))
-    return manifest?.query_engine != null
-  } catch {
-    return false
-  }
+export interface MonitorDiagnostic {
+  root?: string
+  project?: string
+  store_id?: string
+  slug?: string
+  message: string
 }
 
-export async function discoverStores(roots: string[]): Promise<Store[]> {
+const hasCode = (cause: unknown, ...codes: string[]) =>
+  codes.includes((cause as NodeJS.ErrnoException).code ?? "")
+
+const messageOf = (cause: unknown) => (cause as Error).message
+
+export async function scanStores(roots: string[]): Promise<{ stores: Store[]; diagnostics: MonitorDiagnostic[] }> {
   const stores: Store[] = []
+  const diagnostics: MonitorDiagnostic[] = []
+  const visited = new Set<string>()
+  const visitedRoots = new Set<string>()
   for (const root of roots) {
     let projects
     try {
-      projects = await readdir(root, { withFileTypes: true })
-    } catch {
-      continue // a missing or unreadable root is not fatal — other roots still scan
+      const canonicalRoot = await realpath(root)
+      if (visitedRoots.has(canonicalRoot)) continue
+      visitedRoots.add(canonicalRoot)
+      projects = await readdir(canonicalRoot, { withFileTypes: true })
+    } catch (cause) {
+      diagnostics.push({ root, message: `Could not scan root: ${messageOf(cause)}` })
+      continue
     }
-    for (const project of projects) {
-      if (!project.isDirectory()) continue
-      const gbuild = join(root, project.name, ".git", "gbuild")
+    for (const entry of projects) {
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
+      const project = join(root, entry.name)
+      const gbuild = join(project, ".git", "gbuild")
       let features
       try {
         features = await readdir(gbuild, { withFileTypes: true })
-      } catch {
-        continue // no .git/gbuild (or .git is a worktree file) — not a gbuild project
+      } catch (cause) {
+        // Most projects have no gbuild directory. Linked worktrees have a .git file.
+        if (!hasCode(cause, "ENOENT", "ENOTDIR")) {
+          diagnostics.push({ project, message: `Could not scan project: ${messageOf(cause)}` })
+        }
+        continue
       }
       for (const feature of features) {
-        if (!feature.isDirectory()) continue
-        const db = join(gbuild, feature.name, "db")
-        if (await isStore(db)) stores.push({ project: join(root, project.name), slug: feature.name, db })
+        if (!feature.isDirectory() && !feature.isSymbolicLink()) continue
+        const slug = feature.name
+        let db: string
+        try {
+          db = await realpath(join(gbuild, slug, "db"))
+        } catch (cause) {
+          // gbuild may have a feature worktree before its store is created.
+          if (!hasCode(cause, "ENOENT")) {
+            diagnostics.push({ project, slug, message: `Could not find store: ${messageOf(cause)}` })
+          }
+          continue
+        }
+        if (visited.has(db)) continue
+        visited.add(db)
+        const store_id = `store-${createHash("sha256").update(db).digest("hex")}`
+        try {
+          const manifest = JSON.parse(await readFile(join(db, "manifest.json"), "utf8"))
+          if (manifest?.query_engine == null) throw new Error("manifest has no query_engine")
+          stores.push({ store_id, project, slug, db })
+        } catch (cause) {
+          diagnostics.push({ project, store_id, slug, message: `Could not open store manifest: ${messageOf(cause)}` })
+        }
       }
     }
   }
-  return stores
+  return { stores, diagnostics }
+}
+
+export async function discoverStores(roots: string[]): Promise<Store[]> {
+  return (await scanStores(roots)).stores
 }
