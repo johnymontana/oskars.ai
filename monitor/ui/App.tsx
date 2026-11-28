@@ -1,5 +1,5 @@
 // Hash routing between the views: `#/` is the feature list,
-// `#/features/<slug>[/<tab>]` the feature detail (graph, timeline, acceptance,
+// `#/features/<storeId>[/<tab>][?node=<slug>]` the feature detail (graph, timeline, acceptance,
 // repairs or query tab), `#/attention` the cross-store attention dashboard,
 // `#/knowledge` the notes/symbols browser. No router dependency. The header
 // carries route navigation to the top-level routes.
@@ -7,25 +7,32 @@ import { useEffect, useState } from "react"
 import { AttentionView } from "./AttentionView.tsx"
 import { FeatureList } from "./FeatureList.tsx"
 import { GraphDetail } from "./GraphDetail.tsx"
-import type { FeatureTab } from "./GraphDetail.tsx"
 import { KnowledgeView } from "./KnowledgeView.tsx"
+import { featureHref, type FeatureTab } from "./routes.ts"
 
 type Route =
   | { view: "list" }
-  | { view: "graph"; slug: string; tab: FeatureTab }
+  | { view: "graph"; slug: string; tab: FeatureTab; node?: string }
   | { view: "attention" }
   | { view: "knowledge" }
 
 const parseRoute = (hash: string): Route => {
-  const match = hash.match(/^#\/features\/([^/]+?)(?:\/(timeline|acceptance|repairs|query))?$/)
-  if (match)
-    return {
-      view: "graph",
-      slug: decodeURIComponent(match[1] as string),
-      tab: (match[2] ?? "graph") as FeatureTab,
+  const [path = "", query] = hash.split("?", 2)
+  const match = path.match(/^#\/features\/([^/]+?)(?:\/(graph|timeline|acceptance|repairs|query))?$/)
+  if (match) {
+    try {
+      return {
+        view: "graph",
+        slug: decodeURIComponent(match[1] as string),
+        tab: (match[2] ?? "graph") as FeatureTab,
+        node: new URLSearchParams(query).get("node") ?? undefined,
+      }
+    } catch {
+      return { view: "list" }
     }
-  if (hash === "#/attention") return { view: "attention" }
-  if (hash === "#/knowledge") return { view: "knowledge" }
+  }
+  if (path === "#/attention") return { view: "attention" }
+  if (path === "#/knowledge") return { view: "knowledge" }
   return { view: "list" }
 }
 
@@ -36,6 +43,12 @@ export function App({ pollInterval }: { pollInterval?: number }) {
     window.addEventListener("hashchange", onHashChange)
     return () => window.removeEventListener("hashchange", onHashChange)
   }, [])
+  const updateNode = (node?: string) => {
+    if (route.view !== "graph" || route.node === node) return
+    window.history.replaceState(window.history.state, "", featureHref(route.slug, route.tab, node))
+    setRoute({ ...route, node })
+  }
+
   return (
     <>
       <header className="app-header">
@@ -50,7 +63,14 @@ export function App({ pollInterval }: { pollInterval?: number }) {
       </header>
       <main className="app-main">
         {route.view === "graph" ? (
-          <GraphDetail slug={route.slug} tab={route.tab} pollInterval={pollInterval} />
+          <GraphDetail
+            key={route.slug}
+            slug={route.slug}
+            tab={route.tab}
+            node={route.node}
+            onNodeChange={updateNode}
+            pollInterval={pollInterval}
+          />
         ) : route.view === "attention" ? (
           <AttentionView pollInterval={pollInterval} />
         ) : route.view === "knowledge" ? (

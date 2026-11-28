@@ -3,13 +3,14 @@
 // records the requested paths (clear it with `fetchCalls.length = 0`).
 
 export const FEATURES = [
-  { project: "/repo/project-one", slug: "alpha", destination: "Alpha feature done.", status_counts: { completed: 1, frontier: 1 } },
-  { project: "/repo/project-two", slug: "beta", destination: "Beta feature done.", status_counts: { in_progress: 1 } },
+  { project: "/repo/project-one", slug: "alpha", store_id: "store-alpha", destination: "Alpha feature done.", status_counts: { completed: 1, frontier: 1 } },
+  { project: "/repo/project-two", slug: "beta", store_id: "store-beta", destination: "Beta feature done.", status_counts: { in_progress: 1 } },
 ]
 
 export const GRAPH = {
   project: "/repo/project-one",
   slug: "alpha",
+  store_id: "store-alpha",
   destination: "Alpha feature done.",
   nodes: [
     {
@@ -70,32 +71,56 @@ export const ATTENTION = [
   {
     project: "/repo/project-one",
     feature: "alpha",
+    store_id: "store-alpha",
     node: "b-use",
     state: "failed",
     waiting_on: [],
     last_failed_criteria: ["uses the value"],
+    blocked_count: 1,
+    blocking_failures: [],
   },
   {
     project: "/repo/project-two",
     feature: "beta",
+    store_id: "store-beta",
     node: "c-wire",
     state: "blocked",
     waiting_on: ["b-prep"],
     last_failed_criteria: [],
+    blocked_count: 0,
+    blocking_failures: [],
+  },
+  {
+    project: "/repo/project-one",
+    feature: "alpha",
+    store_id: "store-alpha",
+    node: "d-dependent",
+    state: "blocked",
+    waiting_on: ["b-use"],
+    last_failed_criteria: [],
+    blocked_count: 0,
+    blocking_failures: ["b-use"],
   },
 ]
 
+export const OVERVIEW = {
+  features: FEATURES,
+  attention: ATTENTION,
+  diagnostics: [],
+  observed_at: "2026-01-01T00:13:05Z",
+}
+
 export const KNOWLEDGE = {
   notes: [
-    { topic: "setup", text: "run npm ci at the worktree root", by_node: "a-impl", project: "/repo/project-one", feature: "alpha" },
-    { topic: "testing", text: "node --test runs the suite", by_node: "b-use", project: "/repo/project-one", feature: "alpha" },
-    { topic: "setup", text: "relate must be on PATH", by_node: "c-wire", project: "/repo/project-two", feature: "beta" },
-    { topic: "testing", text: "layout settles asynchronously in jsdom", by_node: "a-impl", project: "/repo/project-one", feature: "alpha" },
-    { topic: "setup", text: "unrelated note from another node", by_node: "other-node", project: "/repo/project-one", feature: "alpha" },
+    { topic: "setup", text: "run npm ci at the worktree root", by_node: "a-impl", project: "/repo/project-one", feature: "alpha", store_id: "store-alpha" },
+    { topic: "testing", text: "node --test runs the suite", by_node: "b-use", project: "/repo/project-one", feature: "alpha", store_id: "store-alpha" },
+    { topic: "setup", text: "relate must be on PATH", by_node: "c-wire", project: "/repo/project-two", feature: "beta", store_id: "store-beta" },
+    { topic: "testing", text: "layout settles asynchronously in jsdom", by_node: "a-impl", project: "/repo/project-one", feature: "alpha", store_id: "store-alpha" },
+    { topic: "setup", text: "unrelated note from another node", by_node: "other-node", project: "/repo/project-one", feature: "alpha", store_id: "store-alpha" },
   ],
   symbols: [
-    { name: "listAttention", file: "src/attention.ts", purpose: "failed and blocked nodes across stores", by_node: "a-impl", project: "/repo/project-one", feature: "alpha" },
-    { name: "toNvlGraph", file: "monitor/ui/NvlGraph.tsx", purpose: "maps graph nodes to NVL nodes/rels", by_node: "a-impl", project: "/repo/project-one", feature: "alpha" },
+    { name: "listAttention", file: "src/attention.ts", purpose: "failed and blocked nodes across stores", by_node: "a-impl", project: "/repo/project-one", feature: "alpha", store_id: "store-alpha" },
+    { name: "toNvlGraph", file: "monitor/ui/NvlGraph.tsx", purpose: "maps graph nodes to NVL nodes/rels", by_node: "a-impl", project: "/repo/project-one", feature: "alpha", store_id: "store-alpha" },
   ],
 }
 
@@ -117,8 +142,8 @@ export const QUERY_GRAPH_ROWS = [
 // one merged node, and the two setup notes share one topic hub.
 export const KNOWLEDGE_GRAPH = {
   nodes: [
-    { id: "Feature:/repo/project-one:alpha", labels: ["Feature"], properties: { project: "/repo/project-one", feature: "alpha" } },
-    { id: "Feature:/repo/project-two:beta", labels: ["Feature"], properties: { project: "/repo/project-two", feature: "beta" } },
+    { id: "Feature:/repo/project-one:alpha", labels: ["Feature"], properties: { project: "/repo/project-one", feature: "alpha", store_id: "store-alpha" } },
+    { id: "Feature:/repo/project-two:beta", labels: ["Feature"], properties: { project: "/repo/project-two", feature: "beta", store_id: "store-beta" } },
     {
       id: "Note:/repo/project-one:alpha:setup:run npm ci at the worktree root",
       labels: ["Note"],
@@ -142,42 +167,42 @@ export const KNOWLEDGE_GRAPH = {
       type: "DEFINES",
       from: "Feature:/repo/project-one:alpha",
       to: "Symbol:toNvlGraph:monitor/ui/NvlGraph.tsx",
-      properties: { project: "/repo/project-one", feature: "alpha", by_node: "a-impl" },
+      properties: { project: "/repo/project-one", feature: "alpha", store_id: "store-alpha", by_node: "a-impl" },
     },
     {
       id: "DEFINES:Feature:/repo/project-two:beta->Symbol:toNvlGraph:monitor/ui/NvlGraph.tsx:c-wire",
       type: "DEFINES",
       from: "Feature:/repo/project-two:beta",
       to: "Symbol:toNvlGraph:monitor/ui/NvlGraph.tsx",
-      properties: { project: "/repo/project-two", feature: "beta", by_node: "c-wire" },
+      properties: { project: "/repo/project-two", feature: "beta", store_id: "store-beta", by_node: "c-wire" },
     },
     {
       id: "WROTE:Feature:/repo/project-one:alpha->Note:/repo/project-one:alpha:setup:run npm ci at the worktree root:a-impl",
       type: "WROTE",
       from: "Feature:/repo/project-one:alpha",
       to: "Note:/repo/project-one:alpha:setup:run npm ci at the worktree root",
-      properties: { project: "/repo/project-one", feature: "alpha", by_node: "a-impl" },
+      properties: { project: "/repo/project-one", feature: "alpha", store_id: "store-alpha", by_node: "a-impl" },
     },
     {
       id: "WROTE:Feature:/repo/project-two:beta->Note:/repo/project-two:beta:setup:relate must be on PATH:c-wire",
       type: "WROTE",
       from: "Feature:/repo/project-two:beta",
       to: "Note:/repo/project-two:beta:setup:relate must be on PATH",
-      properties: { project: "/repo/project-two", feature: "beta", by_node: "c-wire" },
+      properties: { project: "/repo/project-two", feature: "beta", store_id: "store-beta", by_node: "c-wire" },
     },
     {
       id: "ABOUT:Note:/repo/project-one:alpha:setup:run npm ci at the worktree root->Topic:setup:a-impl",
       type: "ABOUT",
       from: "Note:/repo/project-one:alpha:setup:run npm ci at the worktree root",
       to: "Topic:setup",
-      properties: { project: "/repo/project-one", feature: "alpha", by_node: "a-impl" },
+      properties: { project: "/repo/project-one", feature: "alpha", store_id: "store-alpha", by_node: "a-impl" },
     },
     {
       id: "ABOUT:Note:/repo/project-two:beta:setup:relate must be on PATH->Topic:setup:c-wire",
       type: "ABOUT",
       from: "Note:/repo/project-two:beta:setup:relate must be on PATH",
       to: "Topic:setup",
-      properties: { project: "/repo/project-two", feature: "beta", by_node: "c-wire" },
+      properties: { project: "/repo/project-two", feature: "beta", store_id: "store-beta", by_node: "c-wire" },
     },
   ],
 }
@@ -250,6 +275,7 @@ export const STATUS_BY_SLUG = new Map([
 export const GAMMA_GRAPH = {
   project: "/repo/project-one",
   slug: "gamma",
+  store_id: "store-gamma",
   destination: "Gamma feature done.",
   nodes: [
     { slug: "a-impl", title: "Implement gamma", type: "code", status: "completed", wave: 0, acceptance: [], depends_on: [], model_tier: "fast", failure_policy: "retry", started_at: null, completed_at: null, inputs: [], outputs: [], reviews: [] },
@@ -275,17 +301,18 @@ globalThis.fetch = (async (input: any, init?: any) => {
   const path = String(input)
   fetchCalls.push(path)
   if (path === "/api/features") return Response.json(FEATURES)
-  if (path === "/api/features/alpha/graph") return Response.json(GRAPH)
-  if (path === "/api/features/alpha/query") {
+  if (["/api/features/alpha/graph", "/api/features/store-alpha/graph"].includes(path)) return Response.json(GRAPH)
+  if (["/api/features/alpha/query", "/api/features/store-alpha/query"].includes(path)) {
     const { cypher } = JSON.parse(String(init?.body ?? "{}")) as { cypher?: string }
     if (String(cypher).includes("BROKEN"))
       return Response.json({ error: "relate exited 1: Variable `nope` not defined" }, { status: 400 })
     if (String(cypher).includes("MATCH")) return Response.json({ rows: QUERY_GRAPH_ROWS })
     return Response.json({ rows: QUERY_SCALAR_ROWS })
   }
-  if (path === "/api/features/alpha/store-graph") return Response.json(STORE_GRAPH)
-  if (path === "/api/features/gamma/graph") return Response.json(GAMMA_GRAPH)
-  if (path === "/api/features/gamma/store-graph") return Response.json(GAMMA_STORE)
+  if (["/api/features/alpha/store-graph", "/api/features/store-alpha/store-graph"].includes(path)) return Response.json(STORE_GRAPH)
+  if (["/api/features/gamma/graph", "/api/features/store-gamma/graph"].includes(path)) return Response.json(GAMMA_GRAPH)
+  if (["/api/features/gamma/store-graph", "/api/features/store-gamma/store-graph"].includes(path)) return Response.json(GAMMA_STORE)
+  if (path === "/api/overview") return Response.json(OVERVIEW)
   if (path === "/api/attention") return Response.json(ATTENTION)
   if (path === "/api/knowledge") return Response.json(KNOWLEDGE)
   if (path === "/api/knowledge/graph") return Response.json(KNOWLEDGE_GRAPH)

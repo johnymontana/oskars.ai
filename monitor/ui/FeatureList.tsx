@@ -1,34 +1,30 @@
-// Feature list view: one row per discovered gbuild store — project path,
-// slug, destination, and per-status node counts. A needs-attention section on
-// top lists failed and blocked nodes across all stores. Polls /api/features
-// and /api/attention.
-import { fetchAttention, fetchFeatures } from "./api.ts"
+import { fetchOverview } from "./api.ts"
 import { AttentionTable } from "./AttentionView.tsx"
+import { RefreshNotice } from "./RefreshNotice.tsx"
+import { featureHref } from "./routes.ts"
 import { StatusChip } from "./StatusChip.tsx"
 import { usePoll } from "./usePoll.ts"
 
 export function FeatureList({ pollInterval }: { pollInterval?: number }) {
-  const { data, error } = usePoll(
-    async () => ({ features: await fetchFeatures(), attention: await fetchAttention() }),
-    pollInterval,
-  )
-  if (error) return (
-    <p role="alert" className="state state-error">
-      failed to load features: {error}
-    </p>
-  )
-  if (!data) return <p className="state state-loading">loading…</p>
-  const { features, attention } = data
+  const { data, error, updatedAt } = usePoll(fetchOverview, pollInterval)
+  if (!data) return error
+    ? <RefreshNotice error={error} updatedAt={updatedAt} />
+    : <p className="state state-loading">loading…</p>
+
+  const { features, attention, diagnostics, observed_at } = data
   return (
     <>
+      <RefreshNotice error={error} diagnostics={diagnostics} updatedAt={observed_at} />
       <section>
         <h2>needs attention</h2>
-        <AttentionTable items={attention} />
+        <AttentionTable items={attention} incomplete={diagnostics.length > 0 || error !== null} />
       </section>
       <section>
         <h1>gbuild features</h1>
         {features.length === 0 ? (
-          <p className="state state-empty">no gbuild features found</p>
+          <p className="state state-empty">
+            {diagnostics.length > 0 ? "no readable gbuild features found" : "no gbuild features found"}
+          </p>
         ) : (
           <table>
             <thead>
@@ -40,17 +36,15 @@ export function FeatureList({ pollInterval }: { pollInterval?: number }) {
               </tr>
             </thead>
             <tbody>
-              {features.map((f) => (
-                <tr key={`${f.project}/${f.slug}`}>
-                  <td className="mono">{f.project}</td>
+              {features.map((feature) => (
+                <tr key={feature.store_id}>
+                  <td className="mono">{feature.project}</td>
                   <td>
-                    <a className="mono" href={`#/features/${encodeURIComponent(f.slug)}`}>
-                      {f.slug}
-                    </a>
+                    <a className="mono" href={featureHref(feature.store_id)}>{feature.slug}</a>
                   </td>
-                  <td>{f.destination}</td>
+                  <td>{feature.destination}</td>
                   <td>
-                    {Object.entries(f.status_counts).map(([status, count]) => (
+                    {Object.entries(feature.status_counts).map(([status, count]) => (
                       <StatusChip key={status} status={status}>
                         {status}: {count}
                       </StatusChip>

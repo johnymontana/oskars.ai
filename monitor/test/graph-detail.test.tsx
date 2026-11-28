@@ -128,10 +128,10 @@ describe("graph detail", () => {
     const tabBar = container.querySelector(".tab-bar")
     assert.ok(tabBar, "feature detail renders a tab bar")
     for (const href of [
-      "#/features/alpha",
-      "#/features/alpha/timeline",
-      "#/features/alpha/acceptance",
-      "#/features/alpha/repairs",
+      "#/features/store-alpha",
+      "#/features/store-alpha/timeline",
+      "#/features/store-alpha/acceptance",
+      "#/features/store-alpha/repairs",
     ]) {
       assert.ok(tabBar.querySelector(`a[href='${href}']`), `tab bar links to ${href}`)
     }

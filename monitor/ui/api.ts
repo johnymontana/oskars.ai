@@ -5,27 +5,39 @@ import type { AttentionItem } from "../src/attention.ts"
 import type { FeatureSummary } from "../src/features.ts"
 import type { GraphDetail, GraphNode } from "../src/graph.ts"
 import type { Knowledge, KnowledgeGraph, KnowledgeGraphNode } from "../src/knowledge.ts"
+import type { Overview } from "../src/overview.ts"
 import type { StoreGraph, StoreGraphNode, StoreGraphRel } from "../src/storegraph.ts"
 
 export type { AttentionItem, FeatureSummary, GraphDetail, GraphNode, Knowledge, KnowledgeGraph, KnowledgeGraphNode, StoreGraph, StoreGraphNode, StoreGraphRel }
 
-const get = async <T>(path: string): Promise<T> => {
-  const res = await fetch(path)
-  if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`)
+type StoreMatch = { store_id: string; project: string; slug: string }
+
+export class AmbiguousStoreError extends Error {
+  constructor(message: string, readonly matches: StoreMatch[]) {
+    super(message)
+  }
+}
+
+const get = async <T>(path: string, signal?: AbortSignal): Promise<T> => {
+  const res = await fetch(path, { signal })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null) as { error?: string; matches?: StoreMatch[] } | null
+    const message = body?.error ?? "GET " + path + " failed: " + res.status
+    if (res.status === 409 && body?.matches) throw new AmbiguousStoreError(message, body.matches)
+    throw new Error(message)
+  }
   return (await res.json()) as T
 }
 
-export const fetchFeatures = () => get<FeatureSummary[]>("/api/features")
+export const fetchOverview = (signal?: AbortSignal) => get<Overview>("/api/overview", signal)
+export const fetchGraph = (storeRef: string, signal?: AbortSignal) =>
+  get<GraphDetail>("/api/features/" + encodeURIComponent(storeRef) + "/graph", signal)
 
-export const fetchGraph = (slug: string) => get<GraphDetail>(`/api/features/${encodeURIComponent(slug)}/graph`)
+export const fetchStoreGraph = (storeRef: string, signal?: AbortSignal) =>
+  get<StoreGraph>("/api/features/" + encodeURIComponent(storeRef) + "/store-graph", signal)
 
-export const fetchStoreGraph = (slug: string) =>
-  get<StoreGraph>(`/api/features/${encodeURIComponent(slug)}/store-graph`)
-
-export const fetchAttention = () => get<AttentionItem[]>("/api/attention")
-export const fetchKnowledge = () => get<Knowledge>("/api/knowledge")
-
-export const fetchKnowledgeGraph = () => get<KnowledgeGraph>("/api/knowledge/graph")
+export const fetchKnowledge = (signal?: AbortSignal) => get<Knowledge>("/api/knowledge", signal)
+export const fetchKnowledgeGraph = (signal?: AbortSignal) => get<KnowledgeGraph>("/api/knowledge/graph", signal)
 
 export type QueryRow = Record<string, unknown>
 

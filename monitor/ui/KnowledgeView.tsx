@@ -11,6 +11,8 @@ import { fetchKnowledge, fetchKnowledgeGraph } from "./api.ts"
 import type { KnowledgeGraph, KnowledgeGraphNode } from "./api.ts"
 import { statusColor } from "./colors.ts"
 import { GraphFrame } from "./GraphFrame.tsx"
+import { RefreshNotice } from "./RefreshNotice.tsx"
+import { featureHref } from "./routes.ts"
 import { usePoll } from "./usePoll.ts"
 
 // Node colors keyed by label, from the status palette (the one color
@@ -38,8 +40,8 @@ export const toNvlKnowledgeGraph = (graph: KnowledgeGraph) => ({
 })
 
 export function KnowledgeView({ pollInterval }: { pollInterval?: number }) {
-  const { data, error } = usePoll(fetchKnowledge, pollInterval)
-  const { data: graph } = usePoll(fetchKnowledgeGraph, pollInterval)
+  const { data, error, updatedAt } = usePoll(fetchKnowledge, pollInterval)
+  const { data: graph, error: graphError, updatedAt: graphUpdatedAt } = usePoll(fetchKnowledgeGraph, pollInterval)
   const [filter, setFilter] = useState("")
   const [layout, setLayout] = useState<Layout>("forceDirected")
   const nvlGraph = useMemo(() => (graph ? toNvlKnowledgeGraph(graph) : null), [graph])
@@ -63,22 +65,28 @@ export function KnowledgeView({ pollInterval }: { pollInterval?: number }) {
         [s.name, s.file, s.purpose, s.by_node, s.project, s.feature].some((f) => f.toLowerCase().includes(query)),
     )
   }, [data, filter])
-  if (error) return (
-    <p role="alert" className="state state-error">
-      failed to load knowledge: {error}
-    </p>
-  )
-  if (!data) return <p className="state state-loading">loading…</p>
+  if (!data) return error
+    ? <RefreshNotice error={error} updatedAt={updatedAt} />
+    : <p className="state state-loading">loading…</p>
   return (
     <section>
       <h1>knowledge</h1>
+      <RefreshNotice error={error} updatedAt={updatedAt} />
+      <RefreshNotice error={graphError} updatedAt={graphUpdatedAt} />
       {nvlGraph && nvlGraph.nodes.length > 0 && (
         <GraphFrame
           nodes={nvlGraph.nodes}
           rels={nvlGraph.rels}
           layout={layout}
           onLayoutChange={setLayout}
-          mouseEventCallbacks={{ onZoomAndPan: true }}
+          mouseEventCallbacks={{
+            onZoomAndPan: true,
+            onNodeClick: ({ id }: { id: string }) => {
+              const feature = graph?.nodes.find((node) => node.id === id && node.labels.includes("Feature"))
+              const storeId = feature?.properties.store_id
+              if (typeof storeId === "string") window.location.hash = featureHref(storeId)
+            },
+          }}
         />
       )}
       <p>
@@ -99,10 +107,10 @@ export function KnowledgeView({ pollInterval }: { pollInterval?: number }) {
             <h3>{topic}</h3>
             <ul>
               {notes.map((note) => (
-                <li key={`${note.project}/${note.feature}/${note.by_node}/${note.text}`}>
+                <li key={`${note.store_id}/${note.by_node}/${note.text}`}>
                   {note.text}{" "}
                   <span className="text-dim">
-                    — <span className="mono">{note.by_node}</span> ({note.project}/{note.feature})
+                    — <span className="mono">{note.by_node}</span> (<a href={featureHref(note.store_id, "graph", note.by_node)}>{note.project}/{note.feature}</a>)
                   </span>
                 </li>
               ))}
@@ -126,13 +134,13 @@ export function KnowledgeView({ pollInterval }: { pollInterval?: number }) {
           </thead>
           <tbody>
             {symbols.map((s) => (
-              <tr key={`${s.project}/${s.feature}/${s.file}/${s.name}`}>
+              <tr key={`${s.store_id}/${s.file}/${s.name}`}>
                 <td className="mono">{s.name}</td>
                 <td className="mono">{s.file}</td>
                 <td>{s.purpose}</td>
                 <td className="mono">{s.by_node}</td>
                 <td className="mono">
-                  {s.project}/{s.feature}
+                  <a href={featureHref(s.store_id, "graph", s.by_node)}>{s.project}/{s.feature}</a>
                 </td>
               </tr>
             ))}

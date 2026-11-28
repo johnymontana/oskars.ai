@@ -5,7 +5,7 @@
 // generic element panel for other nodes and relationships), Timeline (per-node run bars on a shared
 // time axis), Acceptance (feature criteria with their covering nodes), Repairs
 // (per-node review attempt history) and Query (ad-hoc read-only Cypher
-// console). Polls /api/features/:slug/graph, /api/features/:slug/store-graph
+// console). Polls /api/features/:ref/graph, /api/features/:ref/store-graph
 // and /api/knowledge.
 import { useEffect, useState } from "react"
 import type { RefObject } from "react"
@@ -13,17 +13,17 @@ import type NVL from "@neo4j-nvl/base"
 import type { GraphNode } from "../src/graph.ts"
 import type { StoreGraphNode, StoreGraphRel } from "../src/storegraph.ts"
 import { AcceptanceTab } from "./AcceptanceTab.tsx"
-import { fetchGraph, fetchKnowledge, fetchStoreGraph } from "./api.ts"
+import { AmbiguousStoreError, fetchGraph, fetchKnowledge, fetchStoreGraph } from "./api.ts"
 import { ElementPanel } from "./ElementPanel.tsx"
 import { NodePanel } from "./NodePanel.tsx"
 import { QueryTab } from "./QueryTab.tsx"
+import { RefreshNotice } from "./RefreshNotice.tsx"
 import { RepairsTab } from "./RepairsTab.tsx"
+import { featureHref, type FeatureTab } from "./routes.ts"
 import { StatusChip } from "./StatusChip.tsx"
 import { StoreGraphExplorer } from "./StoreGraphExplorer.tsx"
 import { TimelineTab } from "./TimelineTab.tsx"
 import { usePoll } from "./usePoll.ts"
-
-export type FeatureTab = "graph" | "timeline" | "acceptance" | "repairs" | "query"
 
 const TABS: { id: FeatureTab; label: string }[] = [
   { id: "graph", label: "Graph" },
@@ -33,33 +33,48 @@ const TABS: { id: FeatureTab; label: string }[] = [
   { id: "query", label: "Query" },
 ]
 
-const tabHref = (slug: string, tab: FeatureTab) =>
-  `#/features/${encodeURIComponent(slug)}${tab === "graph" ? "" : `/${tab}`}`
-
 export function GraphDetail({
   slug,
   tab = "graph",
+  node,
+  onNodeChange,
   pollInterval,
   nvlRef,
 }: {
   slug: string
   tab?: FeatureTab
+  node?: string
+  onNodeChange?: (node?: string) => void
   pollInterval?: number
   nvlRef?: RefObject<NVL | null>
 }) {
-  const { data, error } = usePoll(() => fetchGraph(slug), pollInterval)
-  // The store graph backs only the Graph tab; other tabs never fetch it.
-  const { data: storeData, error: storeError } = usePoll(
-    tab === "graph" ? () => fetchStoreGraph(slug) : null,
+  const { data, error, updatedAt } = usePoll((signal) => fetchGraph(slug, signal), pollInterval, slug)
+  const storeId = data?.store_id
+  const { data: storeData, error: storeError, updatedAt: storeUpdatedAt } = usePoll(
+    storeId && tab === "graph" ? (signal) => fetchStoreGraph(storeId, signal) : null,
     pollInterval,
+    storeId,
   )
-  const { data: knowledge } = usePoll(fetchKnowledge, pollInterval)
-  const [selectedSlug, setSelectedSlug] = useState<string | null>(null)
+  const { data: knowledge } = usePoll(tab === "graph" ? fetchKnowledge : null, pollInterval)
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(node ?? null)
   const [selectedElement, setSelectedElement] = useState<StoreGraphNode | null>(null)
   const [selectedRel, setSelectedRel] = useState<StoreGraphRel | null>(null)
 
+  useEffect(() => {
+    setSelectedSlug(node ?? null)
+    if (node) {
+      setSelectedElement(null)
+      setSelectedRel(null)
+    }
+  }, [slug, node])
+
+  const selectNode = (nodeSlug: string | null) => {
+    setSelectedSlug(nodeSlug)
+    onNodeChange?.(nodeSlug ?? undefined)
+  }
+
   const clearSelection = () => {
-    setSelectedSlug(null)
+    selectNode(null)
     setSelectedElement(null)
     setSelectedRel(null)
   }
@@ -72,18 +87,28 @@ export function GraphDetail({
     }
     document.addEventListener("keydown", onKey)
     return () => document.removeEventListener("keydown", onKey)
-  }, [selectedSlug, selectedElement, selectedRel])
+  }, [selectedSlug, selectedElement, selectedRel, onNodeChange])
 
-  if (error) return (
-    <p role="alert" className="state state-error">
-      failed to load graph: {error}
-    </p>
+  if (error instanceof AmbiguousStoreError) return (
+    <section>
+      <h1>Choose a project for {slug}</h1>
+      <p>This feature name appears in multiple projects.</p>
+      <ul>
+        {error.matches.map((match) => (
+          <li key={match.store_id}>
+            <a href={featureHref(match.store_id, tab, node)}>{match.project} / {match.slug}</a>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
-  if (!data) return <p className="state state-loading">loading…</p>
+  if (!data) return error
+    ? <RefreshNotice error={error} updatedAt={updatedAt} />
+    : <p className="state state-loading">loading…</p>
 
-  const selected = data.nodes.find((n) => n.slug === selectedSlug) ?? null
-  const leftBySelected = (item: { by_node: string; project: string; feature: string }) =>
-    selected !== null && item.by_node === selected.slug && item.project === data.project && item.feature === data.slug
+  const selected = data.nodes.find((candidate) => candidate.slug === selectedSlug) ?? null
+  const leftBySelected = (item: { by_node: string; store_id: string }) =>
+    selected !== null && item.by_node === selected.slug && item.store_id === data.store_id
   const statusBySlug = new Map(data.nodes.map((n) => [n.slug, n.status]))
 
   // A graph click on a GbuildNode opens the node panel as before; any other
@@ -93,17 +118,17 @@ export function GraphDetail({
     const element = storeData?.nodes.find((n) => n.id === id)
     setSelectedRel(null)
     if (element?.labels.includes("GbuildNode")) {
-      setSelectedSlug(String(element.properties.slug))
+      selectNode(String(element.properties.slug))
       setSelectedElement(null)
     } else {
       setSelectedElement(element ?? null)
-      setSelectedSlug(null)
+      selectNode(null)
     }
   }
 
   const onExplorerRelClick = (id: string) => {
     setSelectedRel(storeData?.rels.find((r) => r.id === id) ?? null)
-    setSelectedSlug(null)
+    selectNode(null)
     setSelectedElement(null)
   }
 
@@ -124,6 +149,7 @@ export function GraphDetail({
   return (
     <section>
       <h1>{data.slug}</h1>
+      <RefreshNotice error={error} updatedAt={updatedAt} />
       <p>
         <span className="mono">{data.project}</span> — {data.destination}
       </p>
@@ -132,7 +158,7 @@ export function GraphDetail({
       </p>
       <nav className="tab-bar" aria-label="feature views">
         {TABS.map((t) => (
-          <a key={t.id} href={tabHref(data.slug, t.id)} aria-current={tab === t.id ? "page" : undefined}>
+          <a key={t.id} href={featureHref(data.store_id, t.id, t.id === "graph" ? selectedSlug ?? undefined : undefined)} aria-current={tab === t.id ? "page" : undefined}>
             {t.label}
           </a>
         ))}
@@ -144,15 +170,12 @@ export function GraphDetail({
       ) : tab === "repairs" ? (
         <RepairsTab nodes={data.nodes} />
       ) : tab === "query" ? (
-        <QueryTab slug={data.slug} />
+        <QueryTab slug={data.store_id} />
       ) : (
         <>
-          {storeError ? (
-            <p role="alert" className="state state-error">
-              failed to load store graph: {storeError}
-            </p>
-          ) : !storeData ? (
-            <p className="state state-loading">loading…</p>
+          <RefreshNotice error={storeError} updatedAt={storeUpdatedAt} />
+          {!storeData ? (
+            !storeError && <p className="state state-loading">loading…</p>
           ) : (
             <StoreGraphExplorer
               graph={storeData}
@@ -169,7 +192,7 @@ export function GraphDetail({
               node={selected}
               notes={(knowledge?.notes ?? []).filter(leftBySelected)}
               symbols={(knowledge?.symbols ?? []).filter(leftBySelected)}
-              onClose={() => setSelectedSlug(null)}
+              onClose={() => selectNode(null)}
             />
           )}
           {selectedElement && storeData && (
@@ -189,7 +212,7 @@ export function GraphDetail({
                       <button
                         type="button"
                         onClick={() => {
-                          setSelectedSlug(node.slug)
+                          selectNode(node.slug)
                           setSelectedElement(null)
                           setSelectedRel(null)
                         }}

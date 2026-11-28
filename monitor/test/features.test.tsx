@@ -3,7 +3,7 @@
 // Runs in jsdom (no vite needed):  node --import tsx --test monitor/test/features.test.tsx
 import assert from "node:assert/strict"
 import { describe, mock, test } from "node:test"
-import { fetchCalls } from "./fixtures.ts"
+import { fetchCalls, OVERVIEW } from "./fixtures.ts"
 import { act, render } from "./helpers.tsx"
 
 const { FeatureList } = await import("../ui/FeatureList.tsx")
@@ -24,23 +24,23 @@ describe("feature list", () => {
     ]) {
       assert.ok(text.includes(expected), `feature list should contain ${JSON.stringify(expected)}`)
     }
-    const link = container.querySelector("a[href='#/features/alpha']")
+    const link = container.querySelector("a[href='#/features/store-alpha']")
     assert.ok(link, "slug links to the graph detail view")
     await unmount()
   })
 
   test("re-fetches on the poll interval without a reload", async () => {
-    mock.timers.enable({ apis: ["setInterval"] })
+    mock.timers.enable({ apis: ["setTimeout"] })
     try {
-      const before = fetchCalls.filter((p) => p === "/api/features").length
+      const before = fetchCalls.filter((p) => p === "/api/overview").length
       const { unmount } = await render(<FeatureList pollInterval={3_000} />)
-      const afterMount = fetchCalls.filter((p) => p === "/api/features").length
+      const afterMount = fetchCalls.filter((p) => p === "/api/overview").length
       assert.equal(afterMount, before + 1, "fetches once on mount")
       await act(async () => {
         mock.timers.tick(3_000)
       })
       assert.equal(
-        fetchCalls.filter((p) => p === "/api/features").length,
+        fetchCalls.filter((p) => p === "/api/overview").length,
         afterMount + 1,
         "re-fetches after one poll interval",
       )
@@ -61,10 +61,35 @@ describe("feature list", () => {
       "the needs-attention section renders above the feature list",
     )
     const section = container.querySelector("section")
-    assert.ok(section?.querySelector("a[href='#/features/alpha']"), "attention item links to feature alpha")
-    assert.ok(section?.querySelector("a[href='#/features/beta']"), "attention item links to feature beta")
+    assert.ok(section?.querySelector("a[href='#/features/store-alpha?node=b-use']"), "attention item opens the failed alpha node")
+    assert.ok(section?.querySelector("a[href='#/features/store-beta?node=c-wire']"), "attention item opens the blocked beta node")
     assert.ok(section?.querySelector(".status-chip[data-status='failed']"), "failed state uses the status chip")
     assert.ok(section?.querySelector(".status-chip[data-status='blocked']"), "blocked state uses the status chip")
     await unmount()
   })
+
+  test("keeps the last snapshot when refresh fails and identifies partial data", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] })
+    let unavailable = false
+    t.mock.method(globalThis, "fetch", async () => {
+      if (unavailable) return Response.json({ error: "temporary failure" }, { status: 503 })
+      return Response.json({
+        ...OVERVIEW,
+        features: OVERVIEW.features.slice(0, 1),
+        diagnostics: [{ project: "/repo/project-two", slug: "beta", message: "store unavailable" }],
+      })
+    })
+    const { container, unmount } = await render(<FeatureList pollInterval={3_000} />)
+    t.after(unmount)
+
+    assert.match(container.textContent ?? "", /Some monitor data could not be loaded/)
+    assert.match(container.textContent ?? "", /project-two \/ beta · store unavailable/)
+    assert.match(container.textContent ?? "", /Alpha feature done/)
+    unavailable = true
+    await act(async () => { t.mock.timers.tick(3_000) })
+    assert.match(container.textContent ?? "", /Refresh failed · temporary failure/)
+    assert.match(container.textContent ?? "", /Alpha feature done/)
+    assert.equal(container.querySelector("time")?.dateTime, OVERVIEW.observed_at)
+  })
+
 })

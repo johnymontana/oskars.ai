@@ -5,7 +5,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { describe, test } from "node:test"
 import { dom } from "./setup.ts"
-import "./fixtures.ts"
+import { GRAPH } from "./fixtures.ts"
 import { act, render } from "./helpers.tsx"
 
 const { App } = await import("../ui/App.tsx")
@@ -62,7 +62,7 @@ describe("app shell", () => {
       })
     }
     await goto("#/attention")
-    assert.ok(container.querySelector("a[href='#/features/alpha']"), "#/attention renders the attention view")
+    assert.ok(container.querySelector("a[href='#/features/store-alpha?node=b-use']"), "#/attention renders the attention view")
     await goto("#/knowledge")
     assert.ok(container.querySelector("input[type='search']"), "#/knowledge renders the knowledge view")
     await goto("#/")
@@ -72,4 +72,71 @@ describe("app shell", () => {
     await unmount()
     window.location.hash = ""
   })
+
+  test("opens the intended node from an attention deep link on the first render", async (t) => {
+    window.history.replaceState(null, "", "#/features/store-alpha?node=b-use")
+    const { container, unmount } = await render(<App pollInterval={60_000} />)
+    t.after(async () => {
+      await unmount()
+      window.history.replaceState(null, "", "#/")
+    })
+    assert.ok(container.querySelector("aside[aria-label='node b-use']"))
+  })
+
+  test("offers project choices for an ambiguous legacy slug", async (t) => {
+    window.history.replaceState(null, "", "#/features/duplicate")
+    const fetch = globalThis.fetch
+    t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== "/api/features/duplicate/graph") return fetch(input, init)
+      return Response.json({
+        error: "feature name is ambiguous",
+        matches: [
+          { store_id: "store-alpha", project: "/repo/project-one", slug: "duplicate" },
+          { store_id: "store-beta", project: "/repo/project-two", slug: "duplicate" },
+        ],
+      }, { status: 409 })
+    })
+    const { container, unmount } = await render(<App pollInterval={60_000} />)
+    t.after(async () => {
+      await unmount()
+      window.history.replaceState(null, "", "#/")
+    })
+    assert.match(container.textContent ?? "", /Choose a project for duplicate/)
+    assert.ok(container.querySelector("a[href='#/features/store-alpha']"))
+    assert.ok(container.querySelector("a[href='#/features/store-beta']"))
+  })
+
+  test("cancels a slow poll when switching stores and ignores its eventual response", async (t) => {
+    window.history.replaceState(null, "", "#/features/store-alpha?node=b-use")
+    t.mock.timers.enable({ apis: ["setTimeout"] })
+    const fetch = globalThis.fetch
+    let resolveAlpha: (response: Response) => void = () => undefined
+    const alphaResponse = new Promise<Response>((resolve) => { resolveAlpha = resolve })
+    let alphaSignal: AbortSignal | null | undefined
+    let requests = 0
+    t.mock.method(globalThis, "fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== "/api/features/store-alpha/graph") return fetch(input, init)
+      requests += 1
+      alphaSignal = init?.signal
+      return alphaResponse
+    })
+    const { container, unmount } = await render(<App pollInterval={3_000} />)
+    t.after(async () => {
+      await unmount()
+      window.history.replaceState(null, "", "#/")
+    })
+    await act(async () => { t.mock.timers.tick(9_000) })
+    assert.equal(requests, 1, "a refresh is only scheduled after the active request settles")
+
+    await act(async () => {
+      window.history.replaceState(null, "", "#/features/store-gamma")
+      window.dispatchEvent(new dom.window.Event("hashchange"))
+    })
+    assert.equal(alphaSignal?.aborted, true)
+    assert.match(container.textContent ?? "", /Gamma feature done/)
+    await act(async () => { resolveAlpha(Response.json(GRAPH)) })
+    assert.match(container.textContent ?? "", /Gamma feature done/)
+    assert.doesNotMatch(container.textContent ?? "", /Alpha feature done/)
+  })
+
 })
